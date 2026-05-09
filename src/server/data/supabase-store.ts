@@ -419,6 +419,14 @@ export const supabaseStore = {
     return result ? allowedUserFrom(result) : null;
   },
 
+  async listUserProfiles() {
+    const { data, error } = await db()
+      .from("user_profiles")
+      .select("*")
+      .order("created_at", { ascending: false });
+    return rows(assertOk(data, error)).map(userProfileFrom);
+  },
+
   async upsertAllowedUser(input: {
     email: string;
     invitedBy?: string | null;

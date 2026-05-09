@@ -172,6 +172,10 @@ export const mockStore = {
     return seedAllowedUsers;
   },
 
+  listUserProfiles() {
+    return [mockUser];
+  },
+
   listMemberships() {
     return seedMemberships;
   },

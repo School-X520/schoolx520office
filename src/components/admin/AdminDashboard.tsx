@@ -1,15 +1,19 @@
 import { Shield, UserPlus, Users } from "lucide-react";
+import { AllowedUserForm } from "@/components/admin/AllowedUserForm";
+import { MembershipManager } from "@/components/admin/MembershipManager";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { StatusPill } from "@/components/layout/StatusPill";
-import type { AllowedUser, RoomMembership, Room } from "@/types/domain";
+import type { AllowedUser, RoomMembership, Room, UserProfile } from "@/types/domain";
 
 export function AdminDashboard({
   allowedUsers,
   memberships,
+  profiles,
   rooms,
 }: {
   allowedUsers: AllowedUser[];
   memberships: RoomMembership[];
+  profiles: UserProfile[];
   rooms: Room[];
 }) {
   return (
@@ -53,17 +57,19 @@ export function AdminDashboard({
             <UserPlus className="size-4 text-terracotta" />
             새 사용자 초대
           </p>
-          <div className="rounded-md border border-dashed border-line bg-white/35 p-5 text-sm text-ink-soft">
-            실제 초대/비활성화는 Supabase service role 설정 후 API가 처리합니다. Mock mode에서는 audit log만 남깁니다.
-          </div>
+          <AllowedUserForm />
         </WarmCard>
       </div>
       <WarmCard>
-        <p className="mb-3 flex items-center gap-2 text-sm font-semibold">
-          <Users className="size-4 text-sage" />
-          방 권한
-        </p>
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="flex items-center gap-2 text-sm font-semibold">
+            <Users className="size-4 text-sage" />
+            방 권한
+          </p>
+          <StatusPill tone="neutral">{profiles.length} profiles</StatusPill>
+        </div>
+        <MembershipManager rooms={rooms} memberships={memberships} profiles={profiles} />
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {rooms.map((room) => {
             const count = memberships.filter((item) => item.roomId === room.id).length;
             return (

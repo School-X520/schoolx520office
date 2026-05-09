@@ -22,6 +22,7 @@ export default async function AdminPage() {
       <AdminDashboard
         allowedUsers={await source.listAllowedUsers()}
         memberships={await source.listMemberships()}
+        profiles={await source.listUserProfiles()}
         rooms={await source.listRooms()}
       />
     </AppShell>
