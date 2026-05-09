@@ -1,0 +1,168 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f4eddd;
+  --paper-deep: #ebe2cd;
+  --card: #fbf7ee;
+  --ink: #1f2937;
+  --ink-soft: #4a5063;
+  --sage: #4a6741;
+  --sage-soft: #6b8463;
+  --terracotta: #b85a3c;
+  --terracotta-soft: #c97b5e;
+  --bronze: #a07229;
+  --gold-soft: #f0e5c9;
+  --line: #c9bba1;
+  --background: var(--paper);
+  --foreground: var(--ink);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-sage: var(--sage);
+  --color-sage-soft: var(--sage-soft);
+  --color-terracotta: var(--terracotta);
+  --color-terracotta-soft: var(--terracotta-soft);
+  --color-bronze: var(--bronze);
+  --color-gold-soft: var(--gold-soft);
+  --color-line: var(--line);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(circle at 20% 10%, rgb(255 255 255 / 0.34), transparent 28rem),
+    radial-gradient(circle at 80% 0%, rgb(240 229 201 / 0.52), transparent 26rem),
+    radial-gradient(circle at 50% 80%, rgb(201 187 161 / 0.26), transparent 32rem),
+    linear-gradient(135deg, rgb(255 255 255 / 0.18) 25%, transparent 25%) 0 0 / 11px 11px;
+}
+
+::selection {
+  background: rgb(184 90 60 / 0.28);
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  outline-color: var(--terracotta);
+}
+
+@media (min-width: 1024px) {
+  .office-floor-grid {
+    grid-template-rows:
+      minmax(0, 1fr)
+      minmax(0, 0.98fr)
+      minmax(0, 1fr)
+      minmax(0, 1fr);
+  }
+
+  .office-side-panel {
+    overflow: hidden;
+  }
+
+  .office-side-panel > * {
+    min-height: 0;
+    flex: 0 0 auto;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 900px) {
+  .office-floor-panel {
+    padding: 0.75rem;
+  }
+
+  .office-floor-heading {
+    margin-bottom: 0.75rem;
+  }
+
+  .office-floor-grid {
+    gap: 0.75rem;
+  }
+
+  .office-floor-grid > * {
+    gap: 0.75rem;
+  }
+
+  .office-room-card,
+  .office-side-card,
+  .office-status-card {
+    padding: 0.75rem;
+  }
+
+  .office-room-card-icon {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+
+  .office-room-card-body {
+    gap: 0.25rem;
+  }
+
+  .office-room-card-desc {
+    -webkit-line-clamp: 1;
+  }
+
+  .office-side-panel {
+    gap: 0.75rem;
+  }
+
+  .office-action-grid,
+  .office-status-metrics {
+    margin-top: 0.75rem;
+  }
+
+  .office-metric-card {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .office-metric-value {
+    margin-top: 0;
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 780px) {
+  .office-status-copy,
+  .office-side-copy,
+  .office-video-copy,
+  .office-flow-card {
+    display: none;
+  }
+
+  .office-recent-summary {
+    -webkit-line-clamp: 1;
+  }
+
+  .office-room-card-meta {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 700px) {
+  .office-room-card-desc,
+  .office-recent-card {
+    display: none;
+  }
+}

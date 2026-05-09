@@ -1,0 +1,82 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { Video } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { TextArea, TextInput } from "@/components/ui/form-controls";
+import { VideoMeetingProviderPicker } from "@/components/video-meetings/VideoMeetingProviderPicker";
+import { VideoMeetingConsentOptions } from "@/components/video-meetings/VideoMeetingConsentOptions";
+
+export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
+  const [title, setTitle] = useState("5월 정기 회의");
+  const [description, setDescription] = useState("메인 회의방 화상회의");
+  const [provider, setProvider] = useState<"google_meet" | "zoom">("google_meet");
+  const [recording, setRecording] = useState(false);
+  const [transcript, setTranscript] = useState(false);
+  const [summary, setSummary] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function createMeeting() {
+    setError(null);
+    startTransition(async () => {
+      const response = await fetch("/api/video-meetings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          roomId: "meeting",
+          provider,
+          title,
+          description,
+          consentRecording: recording,
+          consentTranscript: transcript,
+          consentAiSummary: summary,
+        }),
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        setError(body.error ?? "회의 생성에 실패했습니다.");
+        return;
+      }
+      window.location.href = "/rooms/meeting";
+    });
+  }
+
+  return (
+    <Dialog
+      title="화상회의 시작"
+      description="녹화와 전사는 민감 기능입니다. 회의 시작 전에 동의 상태를 명확히 남깁니다."
+      trigger={
+        <Button className={compact ? "w-full" : ""}>
+          <Video className="size-4" />
+          화상회의 시작
+        </Button>
+      }
+    >
+      <div className="space-y-4">
+        <label className="grid gap-1 text-sm font-medium">
+          회의 제목
+          <TextInput value={title} onChange={(event) => setTitle(event.target.value)} />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">
+          설명
+          <TextArea value={description} onChange={(event) => setDescription(event.target.value)} />
+        </label>
+        <VideoMeetingProviderPicker value={provider} onChange={setProvider} />
+        <VideoMeetingConsentOptions
+          recording={recording}
+          transcript={transcript}
+          summary={summary}
+          onRecordingChange={setRecording}
+          onTranscriptChange={setTranscript}
+          onSummaryChange={setSummary}
+        />
+        {error ? <p className="rounded-md border border-terracotta/35 bg-terracotta/10 p-3 text-sm text-terracotta">{error}</p> : null}
+        <Button disabled={isPending || !title.trim()} onClick={createMeeting} className="w-full">
+          {isPending ? "생성 중" : "회의 만들기"}
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
