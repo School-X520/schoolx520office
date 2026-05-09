@@ -1,14 +1,21 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Globe2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WarmCard } from "@/components/layout/WarmCard";
+import { getCurrentUser } from "@/server/auth/get-current-user";
 
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const params = await searchParams;
+  const [params, currentUser] = await Promise.all([searchParams, getCurrentUser()]);
+
+  if (currentUser) {
+    redirect("/office");
+  }
+
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-10">
       <WarmCard className="w-full max-w-md">
