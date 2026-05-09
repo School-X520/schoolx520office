@@ -1,14 +1,48 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 import { shouldUseMockData } from "@/lib/env";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+function redirectWithCookies(
+  request: NextRequest,
+  target: string,
+  cookiesToSet: {
+    name: string;
+    value: string;
+    options?: Parameters<NextResponse["cookies"]["set"]>[2];
+  }[],
+) {
+  const response = NextResponse.redirect(target.startsWith("http") ? target : new URL(target, request.url));
+  cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+  return response;
+}
 
 export async function GET(request: NextRequest) {
   if (shouldUseMockData()) {
     return NextResponse.redirect(new URL("/office", request.url));
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return NextResponse.redirect(new URL("/login?error=oauth", request.url));
+  }
+
+  const responseCookies: {
+    name: string;
+    value: string;
+    options?: Parameters<NextResponse["cookies"]["set"]>[2];
+  }[] = [];
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        responseCookies.push(...cookiesToSet);
+      },
+    },
+  });
   const redirectTo = new URL("/auth/callback", request.url).toString();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -16,8 +50,8 @@ export async function GET(request: NextRequest) {
   });
 
   if (error || !data.url) {
-    return NextResponse.redirect(new URL("/login?error=oauth", request.url));
+    return redirectWithCookies(request, "/login?error=oauth", responseCookies);
   }
 
-  return NextResponse.redirect(data.url);
+  return redirectWithCookies(request, data.url, responseCookies);
 }
