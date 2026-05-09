@@ -2,13 +2,20 @@ import { AppShell } from "@/components/layout/AppShell";
 import { MeetingSidePanel } from "@/components/office/MeetingSidePanel";
 import { OfficeFloorPlan } from "@/components/office/OfficeFloorPlan";
 import { shouldUseMockData } from "@/lib/env";
+import { AuthError } from "@/server/auth/errors";
 import { requireUser } from "@/server/auth/require-user";
 import { getOfficeView } from "@/server/rooms/get-room-view";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
+import { redirect } from "next/navigation";
 
 export default async function OfficePage() {
-  const user = await requireUser();
+  const user = await requireUser().catch((error) => {
+    if (error instanceof AuthError) {
+      redirect("/login");
+    }
+    throw error;
+  });
   const view = await getOfficeView(user.userId);
   const source = shouldUseMockData() ? mockStore : supabaseStore;
   const activeMeeting = (await source.listVideoMeetings("meeting")).find((meeting) => meeting.status !== "ended") ?? null;

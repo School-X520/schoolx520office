@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { RoomWorkspace } from "@/components/rooms/RoomWorkspace";
+import { AuthError } from "@/server/auth/errors";
 import { requireUser } from "@/server/auth/require-user";
 import { getRoomView } from "@/server/rooms/get-room-view";
 import { mockStore } from "@/server/data/mock-store";
@@ -10,7 +11,12 @@ export function generateStaticParams() {
 
 export default async function RoomPage({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  const user = await requireUser();
+  const user = await requireUser().catch((error) => {
+    if (error instanceof AuthError) {
+      redirect("/login");
+    }
+    throw error;
+  });
   const view = await getRoomView(user.userId, roomId);
   if (!view) {
     notFound();
