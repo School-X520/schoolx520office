@@ -30,7 +30,14 @@ export async function POST(request: Request) {
           invitedBy: user.userId,
           notes: body.notes ?? null,
           isActive: body.isActive ?? true,
+          isAdmin: Boolean(body.isAdmin),
         });
+    if (!shouldUseMockData() && body.isAdmin) {
+      const profile = await supabaseStore.updateUserAdminByEmail(email, true);
+      if (profile) {
+        await supabaseStore.grantAllRoomMemberships(profile.userId, "admin");
+      }
+    }
     await source.addAuditLog({
       actorUserId: user.userId,
       action: "user.invited",

@@ -38,11 +38,15 @@ async function onboardApprovedUser(user: OAuthUser) {
     avatarUrl: metadataText(user.user_metadata, "avatar_url"),
     isAdmin: Boolean(allowedUser.isAdmin),
   });
-  await supabaseStore.upsertMembership({
-    userId: user.id,
-    roomId: "meeting",
-    role: allowedUser.isAdmin ? "admin" : "member",
-  });
+  if (allowedUser.isAdmin) {
+    await supabaseStore.grantAllRoomMemberships(user.id, "admin");
+  } else {
+    await supabaseStore.upsertMembership({
+      userId: user.id,
+      roomId: "meeting",
+      role: "member",
+    });
+  }
 
   return true;
 }

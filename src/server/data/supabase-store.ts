@@ -427,6 +427,27 @@ export const supabaseStore = {
     return rows(assertOk(data, error)).map(userProfileFrom);
   },
 
+  async getUserProfileByEmail(email: string) {
+    const { data, error } = await db()
+      .from("user_profiles")
+      .select("*")
+      .eq("email", email.toLowerCase())
+      .maybeSingle();
+    const result = row(assertOk(data, error));
+    return result ? userProfileFrom(result) : null;
+  },
+
+  async updateUserAdminByEmail(email: string, isAdmin: boolean) {
+    const { data, error } = await db()
+      .from("user_profiles")
+      .update({ is_admin: isAdmin })
+      .eq("email", email.toLowerCase())
+      .select("*")
+      .maybeSingle();
+    const result = row(assertOk(data, error));
+    return result ? userProfileFrom(result) : null;
+  },
+
   async upsertAllowedUser(input: {
     email: string;
     invitedBy?: string | null;
@@ -500,6 +521,11 @@ export const supabaseStore = {
       .eq("room_id", input.roomId);
     assertOk(data, error);
     return { ok: true };
+  },
+
+  async grantAllRoomMemberships(userId: string, role: RoomMembership["role"] = "admin") {
+    const rooms = await this.listRooms();
+    return Promise.all(rooms.map((room) => this.upsertMembership({ userId, roomId: room.id, role })));
   },
 
   async getAgent(agentId: string) {
