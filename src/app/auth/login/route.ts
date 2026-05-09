@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 import { shouldUseMockData } from "@/lib/env";
+import { clearCurrentSupabaseAuthCookies } from "@/lib/supabase/auth-cookies";
 
 function redirectWithCookies(
   request: NextRequest,
@@ -11,8 +12,12 @@ function redirectWithCookies(
     value: string;
     options?: Parameters<NextResponse["cookies"]["set"]>[2];
   }[],
+  clearStaleAuthCookies = false,
 ) {
   const response = NextResponse.redirect(target.startsWith("http") ? target : new URL(target, request.url));
+  if (clearStaleAuthCookies) {
+    clearCurrentSupabaseAuthCookies(response);
+  }
   cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
   return response;
 }
@@ -50,8 +55,8 @@ export async function GET(request: NextRequest) {
   });
 
   if (error || !data.url) {
-    return redirectWithCookies(request, "/login?error=oauth", responseCookies);
+    return redirectWithCookies(request, "/login?error=oauth", responseCookies, true);
   }
 
-  return redirectWithCookies(request, data.url, responseCookies);
+  return redirectWithCookies(request, data.url, responseCookies, true);
 }

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 import { shouldUseMockData } from "@/lib/env";
+import { clearCurrentSupabaseAuthCookies } from "@/lib/supabase/auth-cookies";
 import { supabaseStore } from "@/server/data/supabase-store";
 
 type OAuthUser = {
@@ -23,8 +24,12 @@ function redirectWithCookies(
     value: string;
     options?: Parameters<NextResponse["cookies"]["set"]>[2];
   }[],
+  clearStaleAuthCookies = false,
 ) {
   const response = NextResponse.redirect(new URL(path, request.url));
+  if (clearStaleAuthCookies) {
+    clearCurrentSupabaseAuthCookies(response);
+  }
   cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
   return response;
 }
@@ -97,9 +102,12 @@ export async function GET(request: NextRequest) {
       },
     },
   });
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error) {
-    return redirectWithCookies(request, "/login?error=oauth", responseCookies);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error || !data.session) {
+    if (error) {
+      console.warn("[auth/callback] Supabase OAuth exchange failed:", error.message);
+    }
+    return redirectWithCookies(request, "/login?error=oauth", responseCookies, true);
   }
 
   const {
@@ -109,8 +117,8 @@ export async function GET(request: NextRequest) {
   const approved = user ? await onboardApprovedUser(user) : false;
   if (!approved) {
     await supabase.auth.signOut();
-    return redirectWithCookies(request, "/login?error=not-approved", responseCookies);
+    return redirectWithCookies(request, "/login?error=not-approved", responseCookies, true);
   }
 
-  return redirectWithCookies(request, "/office", responseCookies);
+  return redirectWithCookies(request, "/office", responseCookies, true);
 }

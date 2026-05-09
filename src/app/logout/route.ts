@@ -1,12 +1,16 @@
-import { redirect } from "next/navigation";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { shouldUseMockData } from "@/lib/env";
+import { clearCurrentSupabaseAuthCookies } from "@/lib/supabase/auth-cookies";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   if (!shouldUseMockData()) {
     const supabase = await createSupabaseServerClient();
     await supabase.auth.signOut();
   }
-  redirect("/login");
+
+  const response = NextResponse.redirect(new URL("/login", request.url));
+  clearCurrentSupabaseAuthCookies(response);
+  return response;
 }
