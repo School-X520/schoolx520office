@@ -1,5 +1,6 @@
 import "server-only";
 
+import { shouldUseMockData } from "@/lib/env";
 import { GoogleMeetProvider } from "@/lib/video-meetings/providers/google-meet";
 import { ZoomProvider } from "@/lib/video-meetings/providers/zoom";
 import type { VideoMeetingProvider } from "@/lib/video-meetings/provider";
@@ -12,6 +13,7 @@ import {
 } from "@/lib/video-meetings/permissions";
 import { runAgent } from "@/server/agents/run-agent";
 import { mockStore } from "@/server/data/mock-store";
+import { supabaseStore } from "@/server/data/supabase-store";
 import type { CreateVideoMeetingInput } from "@/types/video-meeting";
 
 function providerFor(id: string): VideoMeetingProvider {
@@ -23,9 +25,10 @@ function providerFor(id: string): VideoMeetingProvider {
 
 export async function createVideoMeeting(userId: string, input: CreateVideoMeetingInput) {
   await assertCanCreateVideoMeeting(userId, input.roomId);
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
   const provider = providerFor(input.provider);
   const result = await provider.createMeeting(input);
-  const meeting = mockStore.createVideoMeeting({
+  const meeting = await source.createVideoMeeting({
     ...input,
     createdBy: userId,
     providerSpaceName: result.providerSpaceName ?? null,
@@ -38,7 +41,7 @@ export async function createVideoMeeting(userId: string, input: CreateVideoMeeti
     metadata: result.metadata ?? {},
   });
 
-  mockStore.addVideoEvent({
+  await source.addVideoEvent({
     videoMeetingId: meeting.id,
     roomId: input.roomId,
     eventType: "created",
@@ -46,7 +49,7 @@ export async function createVideoMeeting(userId: string, input: CreateVideoMeeti
     payload: { provider: input.provider },
   });
 
-  mockStore.createMessage({
+  await source.createMessage({
     roomId: input.roomId,
     type: "video_meeting",
     content: `${input.title} 화상회의가 준비되었습니다.`,
@@ -71,25 +74,27 @@ export async function createVideoMeeting(userId: string, input: CreateVideoMeeti
 
 export async function listVideoMeetings(userId: string, roomId: string, status?: string | null) {
   await assertRoomMember(userId, roomId);
-  return mockStore.listVideoMeetings(roomId, status ?? undefined).map(sanitizeVideoMeetingResponse);
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  return (await source.listVideoMeetings(roomId, status ?? undefined)).map(sanitizeVideoMeetingResponse);
 }
 
 export async function endVideoMeeting(userId: string, meetingId: string) {
   const meeting = await assertCanEndVideoMeeting(userId, meetingId);
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
   const providerId = meeting.providerSpaceName ?? meeting.providerMeetingId ?? meeting.id;
   await providerFor(meeting.provider).endMeeting(providerId);
-  const updated = mockStore.updateVideoMeeting(meeting.id, {
+  const updated = await source.updateVideoMeeting(meeting.id, {
     status: "ended",
     endedAt: new Date().toISOString(),
     endedBy: userId,
   })!;
-  mockStore.addVideoEvent({
+  await source.addVideoEvent({
     videoMeetingId: meeting.id,
     roomId: meeting.roomId,
     eventType: "ended",
     actorUserId: userId,
   });
-  mockStore.createMessage({
+  await source.createMessage({
     roomId: meeting.roomId,
     type: "video_meeting",
     content: `${meeting.title} 화상회의가 종료되었습니다. 회의록 정리를 진행할 수 있습니다.`,
@@ -111,12 +116,13 @@ export async function addVideoMeetingArtifact(userId: string, meetingId: string,
   content?: string;
   externalUrl?: string;
 }) {
-  const meeting = mockStore.getVideoMeeting(meetingId);
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const meeting = await source.getVideoMeeting(meetingId);
   if (!meeting) {
     throw new Error("회의를 찾을 수 없습니다.");
   }
   await assertRoomMember(userId, meeting.roomId);
-  const artifact = mockStore.addVideoArtifact({
+  const artifact = await source.addVideoArtifact({
     videoMeetingId: meetingId,
     artifactType: input.artifactType,
     title: input.title,
@@ -124,7 +130,7 @@ export async function addVideoMeetingArtifact(userId: string, meetingId: string,
     externalUrl: input.externalUrl ?? null,
     createdBy: userId,
   });
-  mockStore.addVideoEvent({
+  await source.addVideoEvent({
     videoMeetingId: meetingId,
     roomId: meeting.roomId,
     eventType: "artifact_ready",
@@ -142,12 +148,13 @@ export async function addVideoMeetingArtifact(userId: string, meetingId: string,
 }
 
 export async function summarizeVideoMeeting(userId: string, meetingId: string) {
-  const meeting = mockStore.getVideoMeeting(meetingId);
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const meeting = await source.getVideoMeeting(meetingId);
   if (!meeting) {
     throw new Error("회의를 찾을 수 없습니다.");
   }
   await assertRoomMember(userId, meeting.roomId);
-  const agent = mockStore.getAgentByRoom("development")!;
+  const agent = (await source.getAgentByRoom("development"))!;
   const result = await runAgent({
     userId,
     roomId: meeting.roomId,
@@ -161,7 +168,7 @@ export async function summarizeVideoMeeting(userId: string, meetingId: string) {
     title: `${meeting.title} AI 회의 요약`,
     content: result.outputMessage.content,
   });
-  mockStore.addVideoEvent({
+  await source.addVideoEvent({
     videoMeetingId: meetingId,
     roomId: meeting.roomId,
     eventType: "summary_created",

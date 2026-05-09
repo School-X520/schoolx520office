@@ -24,8 +24,13 @@ export default async function LoginPage({
             관리자 승인이 필요합니다.
           </div>
         ) : null}
+        {params.error === "oauth" ? (
+          <div className="mb-4 rounded-md border border-terracotta/35 bg-terracotta/10 p-3 text-sm text-terracotta">
+            Google 로그인 연결을 완료하지 못했습니다.
+          </div>
+        ) : null}
         <Button asChild className="w-full">
-          <Link href="/auth/callback?mock=1">
+          <Link href="/auth/login">
             <Globe2 className="size-4" />
             Google로 로그인
           </Link>

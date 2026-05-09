@@ -51,6 +51,7 @@ export function RoomWorkspace({ view, user }: { view: RoomViewModel; user: UserP
         <MessageComposer roomId={view.room.id} hasResidentBot={Boolean(view.agent)} isMeeting={isMeeting} />
       </section>
       <RoomRightPanel
+        roomId={view.room.id}
         memory={view.memory}
         files={view.files}
         sharedItems={view.sharedItems}

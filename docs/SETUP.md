@@ -16,6 +16,14 @@ APP_URL=http://localhost:3000
 4. Run SQL migrations in `supabase/migrations`.
 5. Create Storage bucket `workspace-files`.
 6. Add the first administrator email to `allowed_users`.
+
+```sql
+INSERT INTO public.allowed_users (email, notes, is_admin)
+VALUES ('', '최초 관리자', true)
+ON CONFLICT (email)
+DO UPDATE SET is_active = true, is_admin = true;
+```
+
 7. Configure Google OAuth in Supabase Auth.
 
 Mock mode is enabled by `NEXT_PUBLIC_USE_MOCK_DATA=true`; the app renders without external services.

@@ -1,6 +1,8 @@
 import "server-only";
 
+import { shouldUseMockData } from "@/lib/env";
 import { mockStore } from "@/server/data/mock-store";
+import { supabaseStore } from "@/server/data/supabase-store";
 import type { DomainMemory } from "@/types/domain";
 
 export function mergeMemoryPatch(memory: DomainMemory, patch: Partial<DomainMemory>) {
@@ -16,13 +18,14 @@ export function mergeMemoryPatch(memory: DomainMemory, patch: Partial<DomainMemo
 }
 
 export async function getRoomMemory(roomId: string) {
-  return mockStore.getMemory(roomId);
+  return shouldUseMockData() ? mockStore.getMemory(roomId) : supabaseStore.getMemory(roomId);
 }
 
 export async function getAgentStartupContext(roomId: string, mode: string) {
-  const room = mockStore.getRoom(roomId);
-  const memory = mockStore.getMemory(roomId);
-  const recentMessages = mockStore.listMessages(roomId).slice(-10);
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const room = await source.getRoom(roomId);
+  const memory = await source.getMemory(roomId);
+  const recentMessages = (await source.listMessages(roomId)).slice(-10);
   return {
     room,
     mode,
@@ -32,20 +35,25 @@ export async function getAgentStartupContext(roomId: string, mode: string) {
 }
 
 export async function appendPendingContext(roomId: string, context: Record<string, unknown>) {
-  return mockStore.appendPendingContext(roomId, context);
+  return shouldUseMockData()
+    ? mockStore.appendPendingContext(roomId, context)
+    : supabaseStore.appendPendingContext(roomId, context);
 }
 
 export async function markPendingContextProcessed(roomId: string, contextIds: string[]) {
-  return mockStore.markPendingProcessed(roomId, contextIds);
+  return shouldUseMockData()
+    ? mockStore.markPendingProcessed(roomId, contextIds)
+    : supabaseStore.markPendingProcessed(roomId, contextIds);
 }
 
 export async function updateRoomMemory(roomId: string, patch: Partial<DomainMemory>, agentRunId?: string) {
-  const current = mockStore.getMemory(roomId);
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const current = await source.getMemory(roomId);
   if (!current) {
     return null;
   }
   const next = mergeMemoryPatch(current, { ...patch, updatedByAgentRun: agentRunId ?? null });
-  return mockStore.updateMemory(roomId, next);
+  return source.updateMemory(roomId, next);
 }
 
 export async function createMemoryHistory() {

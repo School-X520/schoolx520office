@@ -1,18 +1,21 @@
 import "server-only";
 
+import { shouldUseMockData } from "@/lib/env";
 import { mockStore } from "@/server/data/mock-store";
+import { supabaseStore } from "@/server/data/supabase-store";
 import { shareMessageToMeeting, importMeetingMessageToRoom } from "@/server/collaboration/share-import-service";
 import { toolRegistry } from "@/server/agents/tools/tool-registry";
 
 export async function executeTool(agentRunId: string, toolName: string, input: Record<string, unknown>) {
-  const run = mockStore.listAgentRuns().find((item) => item.id === agentRunId);
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const run = (await source.listAgentRuns()).find((item) => item.id === agentRunId);
   const definition = toolRegistry.find((tool) => tool.name === toolName);
 
   if (!run || !definition) {
     return { ok: false, error: "invalid_agent_run_or_tool" };
   }
 
-  mockStore.addAuditLog({
+  await source.addAuditLog({
     actorAgentId: run.agentId ?? undefined,
     roomId: run.roomId,
     action: "agent.tool.called",
@@ -22,7 +25,7 @@ export async function executeTool(agentRunId: string, toolName: string, input: R
   });
 
   if (toolName === "read_room_summary") {
-    return { ok: true, data: mockStore.getMemory(String(input.room_id ?? run.roomId)) };
+    return { ok: true, data: await source.getMemory(String(input.room_id ?? run.roomId)) };
   }
 
   if (toolName === "share_item_to_meeting") {
@@ -49,7 +52,7 @@ export async function executeTool(agentRunId: string, toolName: string, input: R
   }
 
   if (toolName === "propose_memory_write") {
-    const review = mockStore.addMemoryReview({
+    const review = await source.addMemoryReview({
       roomId: String(input.room_id ?? run.roomId),
       agentRunId,
       proposedMemory: input.proposed_memory as Record<string, unknown>,

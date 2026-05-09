@@ -1,8 +1,10 @@
 import "server-only";
 
+import { shouldUseMockData } from "@/lib/env";
 import { ForbiddenError } from "@/server/auth/errors";
 import { getRoomMembership, requireRoomMember } from "@/server/auth/require-room-member";
 import { mockStore } from "@/server/data/mock-store";
+import { supabaseStore } from "@/server/data/supabase-store";
 
 export async function assertRoomMember(userId: string, roomId: string) {
   return requireRoomMember(userId, roomId);
@@ -17,7 +19,8 @@ export async function assertCanCreateVideoMeeting(userId: string, roomId: string
 }
 
 export async function assertCanEndVideoMeeting(userId: string, meetingId: string) {
-  const meeting = mockStore.getVideoMeeting(meetingId);
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const meeting = await source.getVideoMeeting(meetingId);
   if (!meeting) {
     throw new Error("회의를 찾을 수 없습니다.");
   }

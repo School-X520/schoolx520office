@@ -65,7 +65,7 @@ export function isServiceRoleConfigured() {
 }
 
 export function shouldUseMockData() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true" || !isSupabaseConfigured();
+  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true" || !isServiceRoleConfigured();
 }
 
 export function missingSetupMessage(scope: string) {

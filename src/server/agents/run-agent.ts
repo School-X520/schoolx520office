@@ -1,10 +1,12 @@
 import "server-only";
 
+import { shouldUseMockData } from "@/lib/env";
 import { getAgentAdapter } from "@/server/agents/get-agent-adapter";
 import { finalizeAgentRun } from "@/server/agents/finalize-agent-run";
 import { createRoomMessage } from "@/server/messages/room-message-service";
 import { getAgentStartupContext } from "@/server/memory/domain-memory-service";
 import { mockStore } from "@/server/data/mock-store";
+import { supabaseStore } from "@/server/data/supabase-store";
 import { requireRoomMember } from "@/server/auth/require-room-member";
 import type { AgentRunMode, AgentRunType } from "@/types/domain";
 
@@ -21,10 +23,11 @@ export async function runAgent(input: {
   if (input.guestSourceRoomId) {
     await requireRoomMember(input.userId, input.guestSourceRoomId);
   }
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
 
   const agent = input.agentId
-    ? mockStore.getAgent(input.agentId)
-    : mockStore.getAgentByRoom(input.guestSourceRoomId ?? input.roomId);
+    ? await source.getAgent(input.agentId)
+    : await source.getAgentByRoom(input.guestSourceRoomId ?? input.roomId);
 
   if (!agent) {
     throw new Error("연결된 봇이 없습니다.");
@@ -37,7 +40,7 @@ export async function runAgent(input: {
     type: "human",
   });
 
-  const run = mockStore.createAgentRun({
+  const run = await source.createAgentRun({
     roomId: input.roomId,
     agentId: agent.id,
     initiatedBy: input.userId,
@@ -48,7 +51,7 @@ export async function runAgent(input: {
     status: "running",
   });
 
-  mockStore.addAuditLog({
+  await source.addAuditLog({
     actorUserId: input.userId,
     actorAgentId: agent.id,
     roomId: input.roomId,
@@ -71,10 +74,10 @@ export async function runAgent(input: {
     });
 
     for (const event of result.events ?? []) {
-      mockStore.addAgentRunEvent(run.id, event.type, event.payload);
+      await source.addAgentRunEvent(run.id, event.type, event.payload);
     }
 
-    const outputMessage = mockStore.createMessage({
+    const outputMessage = await source.createMessage({
       roomId: input.roomId,
       type: input.mode === "meeting_guest" ? "guest_agent" : "agent",
       content: result.content,
@@ -88,7 +91,7 @@ export async function runAgent(input: {
       },
     });
 
-    mockStore.updateAgentRun(run.id, {
+    await source.updateAgentRun(run.id, {
       status: result.requiresAction ? "requires_action" : "completed",
       anthropicSessionId: result.anthropicSessionId ?? null,
       outputMessageId: outputMessage.id,
@@ -96,7 +99,7 @@ export async function runAgent(input: {
       endedAt: new Date().toISOString(),
     });
 
-    mockStore.addAuditLog({
+    await source.addAuditLog({
       actorUserId: input.userId,
       actorAgentId: agent.id,
       roomId: input.roomId,
@@ -106,14 +109,14 @@ export async function runAgent(input: {
     });
 
     await finalizeAgentRun(run.id);
-    return { run: mockStore.updateAgentRun(run.id, { status: "completed" }), outputMessage };
+    return { run: await source.updateAgentRun(run.id, { status: "completed" }), outputMessage };
   } catch (error) {
-    mockStore.updateAgentRun(run.id, {
+    await source.updateAgentRun(run.id, {
       status: "failed",
       error: error instanceof Error ? error.message : "Unknown error",
       endedAt: new Date().toISOString(),
     });
-    mockStore.addAuditLog({
+    await source.addAuditLog({
       actorUserId: input.userId,
       actorAgentId: agent.id,
       roomId: input.roomId,

@@ -5,6 +5,7 @@ import { SharedItemCard } from "@/components/meeting/SharedItemCard";
 import type { Decision, DomainMemory, FileRecord, MeetingImport, SharedItem, Task } from "@/types/domain";
 
 export function RoomRightPanel({
+  roomId,
   memory,
   files,
   sharedItems,
@@ -12,6 +13,7 @@ export function RoomRightPanel({
   decisions,
   tasks,
 }: {
+  roomId: string;
   memory: DomainMemory;
   files: FileRecord[];
   sharedItems: SharedItem[];
@@ -30,7 +32,7 @@ export function RoomRightPanel({
           </div>
         ) : null}
       </WarmCard>
-      <FileList files={files} />
+      <FileList files={files} roomId={roomId} />
       <WarmCard>
         <p className="mb-3 text-sm font-semibold">공유/반입</p>
         <div className="space-y-3">
