@@ -9,6 +9,9 @@ import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function OfficePage() {
   const user = await requireUser().catch((error) => {
     if (error instanceof AuthError) {

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Activity, Bot, ClipboardList, FilePlus2, ListChecks } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WarmCard } from "@/components/layout/WarmCard";
@@ -85,10 +84,10 @@ function Metric({ label, value }: { label: string; value: string }) {
 function Action({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
   return (
     <Button asChild variant="secondary" className="justify-start">
-      <Link href={href}>
+      <a href={href}>
         {icon}
         {label}
-      </Link>
+      </a>
     </Button>
   );
 }

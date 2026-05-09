@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Lock, DoorOpen } from "lucide-react";
 import { WarmCard } from "@/components/layout/WarmCard";
 import type { Room, RoomMembership } from "@/types/domain";
@@ -47,7 +46,7 @@ function RoomLink({
   active?: boolean;
 }) {
   return (
-    <Link
+    <a
       href={accessible ? `/rooms/${room.id}` : "#"}
       aria-disabled={!accessible}
       className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition ${
@@ -59,6 +58,6 @@ function RoomLink({
         <span className="truncate">{room.name}</span>
       </span>
       {!accessible ? <Lock className="size-3.5" /> : null}
-    </Link>
+    </a>
   );
 }

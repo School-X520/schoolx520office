@@ -5,6 +5,9 @@ import { requireUser } from "@/server/auth/require-user";
 import { getRoomView } from "@/server/rooms/get-room-view";
 import { mockStore } from "@/server/data/mock-store";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export function generateStaticParams() {
   return mockStore.listRooms().map((room) => ({ roomId: room.id }));
 }

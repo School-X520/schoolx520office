@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { getCurrentUser } from "@/server/auth/get-current-user";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function LoginPage({
   searchParams,
 }: {

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 import { shouldUseMockData } from "@/lib/env";
-import { clearCurrentSupabaseAuthCookies } from "@/lib/supabase/auth-cookies";
+import { appendCurrentSupabaseSessionCookies, clearCurrentSupabaseAuthCookies } from "@/lib/supabase/auth-cookies";
 import { supabaseStore } from "@/server/data/supabase-store";
 
 type OAuthUser = {
@@ -109,6 +109,7 @@ export async function GET(request: NextRequest) {
     }
     return redirectWithCookies(request, "/login?error=oauth", responseCookies, true);
   }
+  appendCurrentSupabaseSessionCookies(responseCookies, data.session);
 
   const {
     data: { user },
