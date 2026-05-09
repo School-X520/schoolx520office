@@ -3,6 +3,7 @@ import "server-only";
 import { shouldUseMockData } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { readAppSessionUser } from "@/server/auth/app-session";
 import { mockStore } from "@/server/data/mock-store";
 import type { UserProfile } from "@/types/domain";
 
@@ -26,27 +27,67 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user?.email) {
+  if (user?.email) {
+    return getUserProfile({
+      userId: user.id,
+      email: user.email,
+      displayName: user.user_metadata?.name ?? user.email,
+      avatarUrl: user.user_metadata?.avatar_url ?? null,
+    });
+  }
+
+  const appSessionUser = await readAppSessionUser();
+  if (!appSessionUser) {
     return null;
   }
 
+  return getUserProfile({
+    userId: appSessionUser.userId,
+    email: appSessionUser.email,
+    displayName: appSessionUser.email,
+    avatarUrl: null,
+  });
+}
+
+async function getUserProfile({
+  userId,
+  email,
+  displayName,
+  avatarUrl,
+}: {
+  userId: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string | null;
+}): Promise<UserProfile | null> {
   const admin = getSupabaseAdminClient();
   if (!admin) {
+    return null;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const { data: allowedUser } = await (admin as unknown as LooseSupabase)
+    .from("allowed_users")
+    .select("is_active")
+    .eq("email", normalizedEmail)
+    .maybeSingle();
+
+  if (!allowedUser?.is_active) {
     return null;
   }
 
   const { data } = await (admin as unknown as LooseSupabase)
     .from("user_profiles")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (!data) {
     return {
-      userId: user.id,
-      email: user.email,
-      displayName: user.user_metadata?.name ?? user.email,
-      avatarUrl: user.user_metadata?.avatar_url ?? null,
+      userId,
+      email: normalizedEmail,
+      displayName,
+      avatarUrl,
       isAdmin: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

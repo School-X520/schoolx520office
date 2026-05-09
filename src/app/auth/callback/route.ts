@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 
 import { shouldUseMockData } from "@/lib/env";
 import { appendCurrentSupabaseSessionCookies, clearCurrentSupabaseAuthCookies } from "@/lib/supabase/auth-cookies";
+import { setAppSessionCookie } from "@/server/auth/app-session";
 import { supabaseStore } from "@/server/data/supabase-store";
 
 type OAuthUser = {
@@ -25,12 +26,16 @@ function redirectWithCookies(
     options?: Parameters<NextResponse["cookies"]["set"]>[2];
   }[],
   clearStaleAuthCookies = false,
+  appSessionUser?: { userId: string; email: string },
 ) {
   const response = NextResponse.redirect(new URL(path, request.url));
   if (clearStaleAuthCookies) {
     clearCurrentSupabaseAuthCookies(response);
   }
   cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+  if (appSessionUser) {
+    setAppSessionCookie(response, appSessionUser);
+  }
   return response;
 }
 
@@ -115,11 +120,13 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const approved = user ? await onboardApprovedUser(user) : false;
-  if (!approved) {
+  if (!user || !(await onboardApprovedUser(user))) {
     await supabase.auth.signOut();
     return redirectWithCookies(request, "/login?error=not-approved", responseCookies, true);
   }
 
-  return redirectWithCookies(request, "/office", responseCookies, true);
+  return redirectWithCookies(request, "/office", responseCookies, true, {
+    userId: user.id,
+    email: user.email!,
+  });
 }

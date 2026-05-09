@@ -4,6 +4,7 @@ import { jsonOk } from "@/lib/api";
 import { shouldUseMockData } from "@/lib/env";
 import { getSupabaseProjectRef, isCurrentSupabaseAuthCookie } from "@/lib/supabase/auth-cookies";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { readAppSessionUser } from "@/server/auth/app-session";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export async function GET() {
     .sort();
   const currentProjectCookieNames = supabaseCookieNames.filter(isCurrentSupabaseAuthCookie);
   const otherSupabaseCookieNames = supabaseCookieNames.filter((name) => !isCurrentSupabaseAuthCookie(name));
+  const appSessionUser = await readAppSessionUser().catch(() => null);
 
   if (shouldUseMockData()) {
     return jsonOk(
@@ -31,6 +33,8 @@ export async function GET() {
         supabaseCookieCount: supabaseCookieNames.length,
         supabaseCookieNames,
         authError: null,
+        hasAppSession: Boolean(appSessionUser),
+        appSessionEmail: appSessionUser?.email ?? null,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -55,6 +59,8 @@ export async function GET() {
       supabaseCookieCount: supabaseCookieNames.length,
       supabaseCookieNames,
       authError: error?.message ?? null,
+      hasAppSession: Boolean(appSessionUser),
+      appSessionEmail: appSessionUser?.email ?? null,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

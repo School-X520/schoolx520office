@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 
 import { shouldUseMockData } from "@/lib/env";
 import { clearCurrentSupabaseAuthCookies } from "@/lib/supabase/auth-cookies";
+import { clearAppSessionCookie } from "@/server/auth/app-session";
 
 function redirectWithCookies(
   request: NextRequest,
@@ -17,6 +18,7 @@ function redirectWithCookies(
   const response = NextResponse.redirect(target.startsWith("http") ? target : new URL(target, request.url));
   if (clearStaleAuthCookies) {
     clearCurrentSupabaseAuthCookies(response);
+    clearAppSessionCookie(response);
   }
   cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
   return response;
