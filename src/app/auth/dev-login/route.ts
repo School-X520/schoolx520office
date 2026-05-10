@@ -22,11 +22,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=dev-login-unavailable", request.url));
   }
 
-  const response = NextResponse.redirect(new URL("/office", request.url));
+  const response = NextResponse.redirect(new URL(getSafeNextPath(request.nextUrl.searchParams.get("next")), request.url));
   clearCurrentSupabaseAuthCookies(response);
   setAppSessionCookie(response, {
     userId: profile.userId,
     email: profile.email,
   });
   return response;
+}
+
+function getSafeNextPath(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || /[\r\n]/.test(value)) {
+    return "/office";
+  }
+
+  return value;
 }

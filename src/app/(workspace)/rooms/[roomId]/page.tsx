@@ -1,7 +1,8 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { RoomWorkspace } from "@/components/rooms/RoomWorkspace";
 import { AuthError } from "@/server/auth/errors";
 import { requireUser } from "@/server/auth/require-user";
+import { redirectToLogin } from "@/server/auth/redirect-to-login";
 import { getRoomView } from "@/server/rooms/get-room-view";
 import { mockStore } from "@/server/data/mock-store";
 
@@ -16,7 +17,7 @@ export default async function RoomPage({ params }: { params: Promise<{ roomId: s
   const { roomId } = await params;
   const user = await requireUser().catch((error) => {
     if (error instanceof AuthError) {
-      redirect("/login");
+      return redirectToLogin(`/rooms/${roomId}`);
     }
     throw error;
   });

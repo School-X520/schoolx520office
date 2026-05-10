@@ -4,10 +4,10 @@ import { OfficeFloorPlan } from "@/components/office/OfficeFloorPlan";
 import { shouldUseMockData } from "@/lib/env";
 import { AuthError } from "@/server/auth/errors";
 import { requireUser } from "@/server/auth/require-user";
+import { redirectToLogin } from "@/server/auth/redirect-to-login";
 import { getOfficeView } from "@/server/rooms/get-room-view";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
-import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,7 +15,7 @@ export const revalidate = 0;
 export default async function OfficePage() {
   const user = await requireUser().catch((error) => {
     if (error instanceof AuthError) {
-      redirect("/login");
+      return redirectToLogin("/office");
     }
     throw error;
   });
