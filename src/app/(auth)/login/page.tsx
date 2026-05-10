@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { Globe2, ShieldCheck } from "lucide-react";
+import { Globe2, ShieldCheck, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { getCurrentUser } from "@/server/auth/get-current-user";
+import { isDevLoginEnabledForHost } from "@/server/auth/dev-login";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,7 +15,8 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const [params, currentUser] = await Promise.all([searchParams, getCurrentUser()]);
+  const [params, currentUser, requestHeaders] = await Promise.all([searchParams, getCurrentUser(), headers()]);
+  const showDevLogin = isDevLoginEnabledForHost(requestHeaders.get("host"));
 
   if (currentUser) {
     redirect("/office");
@@ -39,12 +42,25 @@ export default async function LoginPage({
             Google 로그인 연결을 완료하지 못했습니다.
           </div>
         ) : null}
+        {params.error?.startsWith("dev-login") ? (
+          <div className="mb-4 rounded-md border border-terracotta/35 bg-terracotta/10 p-3 text-sm text-terracotta">
+            개발용 로그인을 사용할 수 없습니다. ENABLE_DEV_LOGIN과 승인 사용자 설정을 확인하세요.
+          </div>
+        ) : null}
         <Button asChild className="w-full">
           <Link href="/auth/login">
             <Globe2 className="size-4" />
             Google로 로그인
           </Link>
         </Button>
+        {showDevLogin ? (
+          <Button asChild variant="secondary" className="mt-3 w-full">
+            <Link href="/auth/dev-login">
+              <Wrench className="size-4" />
+              개발용 관리자 로그인
+            </Link>
+          </Button>
+        ) : null}
         <div className="mt-4 flex items-center justify-center gap-2 text-xs text-ink-soft">
           <ShieldCheck className="size-3.5" />
           Mock mode에서는 바로 입장합니다.
