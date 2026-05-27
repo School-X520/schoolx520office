@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { Lock, DoorOpen } from "lucide-react";
 import { WarmCard } from "@/components/layout/WarmCard";
+import { cn } from "@/lib/utils/cn";
 import type { Room, RoomMembership } from "@/types/domain";
 
 export function SidebarPanel({
@@ -45,19 +47,32 @@ function RoomLink({
   accessible: boolean;
   active?: boolean;
 }) {
-  return (
-    <a
-      href={accessible ? `/rooms/${room.id}` : "#"}
-      aria-disabled={!accessible}
-      className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition ${
-        active ? "bg-gold-soft text-ink" : "text-ink-soft hover:bg-card"
-      } ${accessible ? "" : "opacity-55"}`}
-    >
+  const className = cn(
+    "flex items-center justify-between rounded-md px-3 py-2 text-sm transition",
+    active ? "bg-gold-soft text-ink" : "text-ink-soft hover:bg-card",
+    !accessible && "opacity-55",
+  );
+  const content = (
+    <>
       <span className="flex min-w-0 items-center gap-2">
         <span>{room.icon}</span>
         <span className="truncate">{room.name}</span>
       </span>
       {!accessible ? <Lock className="size-3.5" /> : null}
-    </a>
+    </>
+  );
+
+  if (!accessible) {
+    return (
+      <div aria-disabled="true" className={className}>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Link href={`/rooms/${room.id}`} className={className}>
+      {content}
+    </Link>
   );
 }

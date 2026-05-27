@@ -288,6 +288,7 @@ export type VideoMeetingEvent = {
 export type RoomViewModel = {
   room: Room;
   agent?: Agent;
+  guestAgents?: Agent[];
   membership?: RoomMembership;
   memory: DomainMemory;
   messages: RoomMessage[];

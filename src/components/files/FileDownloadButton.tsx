@@ -21,12 +21,18 @@ export function FileDownloadButton({ fileId, roomId }: { fileId: string; roomId:
           setError(null);
           startTransition(async () => {
             const response = await fetch(`/api/files/${fileId}/download?roomId=${roomId}`);
-            const result = (await response.json()) as { signedUrl?: string; error?: string };
+            const result = (await response.json()) as { signedUrl?: string; file?: { originalName?: string }; error?: string };
             if (!response.ok || !result.signedUrl) {
               setError(result.error ?? "다운로드 링크를 만들지 못했습니다.");
               return;
             }
-            window.open(result.signedUrl, "_blank", "noopener,noreferrer");
+            const link = document.createElement("a");
+            link.href = result.signedUrl;
+            link.download = result.file?.originalName ?? "download";
+            link.rel = "noopener noreferrer";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
           });
         }}
       >

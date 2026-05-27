@@ -1,5 +1,5 @@
 import { jsonError, jsonOk } from "@/lib/api";
-import { listRoomFiles, uploadRoomFile } from "@/server/files/file-service";
+import { deleteRoomFile, listRoomFiles, uploadRoomFile } from "@/server/files/file-service";
 import { requireUser } from "@/server/auth/require-user";
 
 function formText(value: FormDataEntryValue | null, fallback: string) {
@@ -37,6 +37,21 @@ export async function POST(request: Request) {
     });
 
     return jsonOk({ file: uploaded });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const user = await requireUser();
+    const body = (await request.json()) as { roomId?: string; fileId?: string };
+    if (!body.fileId) {
+      return jsonOk({ ok: false, message: "fileId가 필요합니다." }, { status: 400 });
+    }
+    const roomId = body.roomId?.trim() || "meeting";
+    const deleted = await deleteRoomFile({ userId: user.userId, roomId, fileId: body.fileId });
+    return jsonOk({ file: deleted });
   } catch (error) {
     return jsonError(error);
   }

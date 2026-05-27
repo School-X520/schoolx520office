@@ -25,9 +25,9 @@ export function TopHeader({ user }: { user: UserProfile }) {
             </Link>
           </Button>
           <Button asChild variant="ghost" size="icon" className="text-white hover:bg-white/10" aria-label="로그아웃">
-            <Link href="/logout">
+            <a href="/logout">
               <LogOut className="size-4" />
-            </Link>
+            </a>
           </Button>
         </div>
       </div>

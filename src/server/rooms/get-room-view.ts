@@ -3,47 +3,72 @@ import "server-only";
 import { shouldUseMockData } from "@/lib/env";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
-import { requireRoomMember } from "@/server/auth/require-room-member";
+import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 
 export async function getOfficeView(userId: string) {
   const source = shouldUseMockData() ? mockStore : supabaseStore;
-  const rooms = await source.listRooms();
-  const memberships = shouldUseMockData()
-    ? mockStore.listMemberships().filter((item) => item.userId === userId)
-    : await supabaseStore.listMemberships(userId);
-  const agents = await source.listAgents();
-  const messagesByRoom = Object.fromEntries(
-    await Promise.all(
-      rooms.map(async (room) => [room.id, (await source.listMessages(room.id)).length] as const),
-    ),
-  );
-  return { rooms, memberships, agents, messagesByRoom };
+  const [rooms, memberships, agents] = await Promise.all([
+    source.listRooms(),
+    shouldUseMockData()
+      ? Promise.resolve(mockStore.listMemberships().filter((item) => item.userId === userId))
+      : supabaseStore.listMemberships(userId),
+    source.listAgents(),
+  ]);
+  return { rooms, memberships, agents };
 }
 
 export async function getRoomView(userId: string, roomId: string) {
   const source = shouldUseMockData() ? mockStore : supabaseStore;
-  const room = await source.getRoom(roomId);
+  const [room, membership] = await Promise.all([source.getRoom(roomId), requireRoomMember(userId, roomId)]);
   if (!room) {
     return null;
   }
 
-  const membership = await requireRoomMember(userId, roomId);
-  const activeMeeting =
-    (await source
-      .listVideoMeetings(roomId))
-      .find((meeting) => meeting.status === "live" || meeting.status === "scheduled") ?? null;
+  const userMemberships =
+    roomId === "meeting"
+      ? shouldUseMockData()
+        ? mockStore.listMemberships().filter((item) => item.userId === userId)
+        : await supabaseStore.listMemberships(userId)
+      : [];
+  const writableRoomIds = new Set(userMemberships.filter((item) => canWriteRoom(item.role)).map((item) => item.roomId));
+  const [
+    residentAgent,
+    agents,
+    videoMeetings,
+    memory,
+    messages,
+    files,
+    sharedItems,
+    imports,
+    decisions,
+    tasks,
+  ] = await Promise.all([
+    source.getAgentByRoom(roomId),
+    roomId === "meeting" ? source.listAgents() : Promise.resolve([]),
+    source.listVideoMeetings(roomId),
+    source.getMemory(roomId),
+    source.listMessages(roomId),
+    source.listFiles(roomId),
+    source.listSharedItems(roomId),
+    source.listImports(roomId),
+    source.listDecisions(roomId),
+    source.listTasks(roomId),
+  ]);
+  const guestAgents = roomId === "meeting" ? agents.filter((agent) => writableRoomIds.has(agent.roomId)) : [];
+  const activeMeeting = videoMeetings.find((meeting) => meeting.status === "live" || meeting.status === "scheduled") ?? null;
 
   return {
     room,
-    agent: (await source.getAgentByRoom(roomId)) ?? undefined,
+    agent: residentAgent ?? undefined,
+    guestAgents,
     membership,
-    memory: (await source.getMemory(roomId))!,
-    messages: await source.listMessages(roomId),
-    files: await source.listFiles(roomId),
-    sharedItems: await source.listSharedItems(roomId),
-    imports: await source.listImports(roomId),
-    decisions: await source.listDecisions(roomId),
-    tasks: await source.listTasks(roomId),
+    memory: memory!,
+    messages,
+    files,
+    sharedItems,
+    imports,
+    decisions,
+    tasks,
     activeMeeting,
   };
 }

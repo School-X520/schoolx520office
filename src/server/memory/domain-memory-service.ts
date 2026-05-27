@@ -21,16 +21,28 @@ export async function getRoomMemory(roomId: string) {
   return shouldUseMockData() ? mockStore.getMemory(roomId) : supabaseStore.getMemory(roomId);
 }
 
-export async function getAgentStartupContext(roomId: string, mode: string) {
+export async function getAgentStartupContext(roomId: string, mode: string, options: { messageLimit?: number } = {}) {
   const source = shouldUseMockData() ? mockStore : supabaseStore;
-  const room = await source.getRoom(roomId);
-  const memory = await source.getMemory(roomId);
-  const recentMessages = (await source.listMessages(roomId)).slice(-10);
+  const [room, memory, messages, agents] = await Promise.all([
+    source.getRoom(roomId),
+    source.getMemory(roomId),
+    source.listMessages(roomId),
+    source.listAgents(),
+  ]);
+  const messageLimit = options.messageLimit ?? 40;
+  const recentMessages = messages.slice(-messageLimit);
   return {
     room,
     mode,
     memory,
+    messageCount: messages.length,
     recentMessages,
+    agents: agents.map((agent) => ({
+      id: agent.id,
+      roomId: agent.roomId,
+      name: agent.name,
+      role: agent.role,
+    })),
   };
 }
 

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-import { shouldUseMockData } from "@/lib/env";
+import { getServerEnv, shouldUseMockData } from "@/lib/env";
 import { appendCurrentSupabaseSessionCookies, clearCurrentSupabaseAuthCookies } from "@/lib/supabase/auth-cookies";
 import { setAppSessionCookie } from "@/server/auth/app-session";
 import { supabaseStore } from "@/server/data/supabase-store";
@@ -15,6 +15,14 @@ type OAuthUser = {
 function metadataText(metadata: Record<string, unknown> | undefined, key: string) {
   const value = metadata?.[key];
   return typeof value === "string" ? value : null;
+}
+
+function hasConfiguredAllRoomAccess(email: string) {
+  return getServerEnv()
+    .ALL_ROOM_ACCESS_EMAILS.split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(email);
 }
 
 function redirectWithCookies(
@@ -62,8 +70,8 @@ async function onboardApprovedUser(user: OAuthUser) {
     avatarUrl: metadataText(user.user_metadata, "avatar_url"),
     isAdmin: Boolean(allowedUser.isAdmin),
   });
-  if (allowedUser.isAdmin) {
-    await supabaseStore.grantAllRoomMemberships(user.id, "admin");
+  if (allowedUser.isAdmin || hasConfiguredAllRoomAccess(email)) {
+    await supabaseStore.grantAllRoomMemberships(user.id, allowedUser.isAdmin ? "admin" : "member");
   } else {
     await supabaseStore.upsertMembership({
       userId: user.id,

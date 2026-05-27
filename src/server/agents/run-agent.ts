@@ -1,6 +1,7 @@
 import "server-only";
 
 import { shouldUseMockData } from "@/lib/env";
+import { AnthropicApiError } from "@/lib/anthropic/managed-agents-api";
 import { getAgentAdapter } from "@/server/agents/get-agent-adapter";
 import { finalizeAgentRun } from "@/server/agents/finalize-agent-run";
 import { createRoomMessage } from "@/server/messages/room-message-service";
@@ -8,22 +9,42 @@ import { getAgentStartupContext } from "@/server/memory/domain-memory-service";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { requireRoomMember } from "@/server/auth/require-room-member";
-import type { AgentRunMode, AgentRunType } from "@/types/domain";
+import type { AgentRun, AgentRunMode, AgentRunType, RoomMessage } from "@/types/domain";
 
-export async function runAgent(input: {
+type RunAgentInput = {
   userId: string;
   roomId: string;
   agentId?: string;
   message: string;
+  inputMessageId?: string | null;
   mode?: AgentRunMode;
   runType?: AgentRunType;
   guestSourceRoomId?: string | null;
-}) {
+};
+
+type AgentRunJob = {
+  runId: string;
+  userId: string;
+  roomId: string;
+  agentId: string;
+  message: string;
+  mode: AgentRunMode;
+  guestSourceRoomId: string | null;
+};
+
+type StartedAgentRun = {
+  run: AgentRun;
+  inputMessage: RoomMessage;
+  job: AgentRunJob;
+};
+
+function getSource() {
+  return shouldUseMockData() ? mockStore : supabaseStore;
+}
+
+export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentRun> {
   await requireRoomMember(input.userId, input.roomId);
-  if (input.guestSourceRoomId) {
-    await requireRoomMember(input.userId, input.guestSourceRoomId);
-  }
-  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const source = getSource();
 
   const agent = input.agentId
     ? await source.getAgent(input.agentId)
@@ -33,65 +54,107 @@ export async function runAgent(input: {
     throw new Error("연결된 봇이 없습니다.");
   }
 
-  const inputMessage = await createRoomMessage({
-    userId: input.userId,
-    roomId: input.roomId,
-    content: input.message,
-    type: "human",
-  });
+  const mode = input.mode ?? "room";
+  const guestSourceRoomId = input.guestSourceRoomId ?? (mode === "meeting_guest" ? agent.roomId : null);
+
+  if (mode === "meeting_guest") {
+    if (input.roomId !== "meeting") {
+      throw new Error("게스트 봇 호출은 메인 회의방에서만 가능합니다.");
+    }
+    await requireRoomMember(input.userId, guestSourceRoomId ?? agent.roomId);
+  } else if (agent.roomId !== input.roomId) {
+    throw new Error("이 방의 상주 봇만 호출할 수 있습니다.");
+  }
+
+  const inputMessage = input.inputMessageId
+    ? await getExistingInputMessage(input.roomId, input.inputMessageId)
+    : await createRoomMessage({
+        userId: input.userId,
+        roomId: input.roomId,
+        content: input.message,
+        type: "human",
+      });
 
   const run = await source.createAgentRun({
     roomId: input.roomId,
     agentId: agent.id,
     initiatedBy: input.userId,
-    mode: input.mode ?? "room",
-    runType: input.runType ?? (input.mode === "meeting_guest" ? "meeting_guest" : "room_agent"),
-    guestSourceRoomId: input.guestSourceRoomId ?? null,
+    mode,
+    runType: input.runType ?? (mode === "meeting_guest" ? "meeting_guest" : "room_agent"),
+    guestSourceRoomId,
     inputMessageId: inputMessage.id,
-    status: "running",
+    status: "queued",
   });
 
+  return {
+    run,
+    inputMessage,
+    job: {
+      runId: run.id,
+      userId: input.userId,
+      roomId: input.roomId,
+      agentId: agent.id,
+      message: input.message,
+      mode,
+      guestSourceRoomId,
+    },
+  };
+}
+
+export async function completeAgentRun(job: AgentRunJob) {
+  const source = getSource();
+  const runningRun = await source.updateAgentRun(job.runId, { status: "running" });
+  if (!runningRun) {
+    throw new Error("봇 실행을 찾을 수 없습니다.");
+  }
+
   await source.addAuditLog({
-    actorUserId: input.userId,
-    actorAgentId: agent.id,
-    roomId: input.roomId,
+    actorUserId: job.userId,
+    actorAgentId: job.agentId,
+    roomId: job.roomId,
     action: "agent.run.started",
     targetType: "agent_run",
-    targetId: run.id,
+    targetId: job.runId,
   });
 
   try {
     const adapter = getAgentAdapter();
-    const startupContext = await getAgentStartupContext(input.guestSourceRoomId ?? input.roomId, input.mode ?? "room");
+    const startupContext = await getRunStartupContext(job);
     const result = await adapter.run({
-      roomId: input.roomId,
-      agentId: agent.id,
-      userId: input.userId,
-      message: input.message,
-      mode: input.mode ?? "room",
-      guestSourceRoomId: input.guestSourceRoomId ?? null,
+      agentRunId: job.runId,
+      roomId: job.roomId,
+      agentId: job.agentId,
+      userId: job.userId,
+      message: job.message,
+      mode: job.mode,
+      guestSourceRoomId: job.guestSourceRoomId,
       startupContext,
     });
 
     for (const event of result.events ?? []) {
-      await source.addAgentRunEvent(run.id, event.type, event.payload);
+      await source.addAgentRunEvent(job.runId, event.type, event.payload);
     }
 
     const outputMessage = await source.createMessage({
-      roomId: input.roomId,
-      type: input.mode === "meeting_guest" ? "guest_agent" : "agent",
+      roomId: job.roomId,
+      type: job.mode === "meeting_guest" ? "guest_agent" : "agent",
       content: result.content,
       senderUserId: null,
-      senderAgentId: agent.id,
-      agentRunId: run.id,
+      senderAgentId: job.agentId,
+      agentRunId: job.runId,
       metadata: {
-        sourceRoomId: input.guestSourceRoomId ?? agent.roomId,
-        guestLabel: input.mode === "meeting_guest" ? agent.name : undefined,
-        autoExitAfterTurns: input.mode === "meeting_guest" ? 3 : undefined,
+        sourceRoomId: job.guestSourceRoomId ?? job.roomId,
+        autoExitAfterTurns: job.mode === "meeting_guest" ? 3 : undefined,
+        generatedFiles: result.generatedFiles?.map((file) => ({
+          id: file.id,
+          originalName: file.originalName,
+          sizeBytes: file.sizeBytes,
+          mimeType: file.mimeType,
+        })),
       },
     });
 
-    await source.updateAgentRun(run.id, {
+    const completedRun = await source.updateAgentRun(job.runId, {
       status: result.requiresAction ? "requires_action" : "completed",
       anthropicSessionId: result.anthropicSessionId ?? null,
       outputMessageId: outputMessage.id,
@@ -100,31 +163,73 @@ export async function runAgent(input: {
     });
 
     await source.addAuditLog({
-      actorUserId: input.userId,
-      actorAgentId: agent.id,
-      roomId: input.roomId,
+      actorUserId: job.userId,
+      actorAgentId: job.agentId,
+      roomId: job.roomId,
       action: "agent.run.completed",
       targetType: "agent_run",
-      targetId: run.id,
+      targetId: job.runId,
     });
 
-    await finalizeAgentRun(run.id);
-    return { run: await source.updateAgentRun(run.id, { status: "completed" }), outputMessage };
+    await finalizeAgentRun(job.runId);
+    return { run: completedRun, outputMessage };
   } catch (error) {
-    await source.updateAgentRun(run.id, {
+    await source.updateAgentRun(job.runId, {
       status: "failed",
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: agentRunErrorMessage(error),
       endedAt: new Date().toISOString(),
     });
     await source.addAuditLog({
-      actorUserId: input.userId,
-      actorAgentId: agent.id,
-      roomId: input.roomId,
+      actorUserId: job.userId,
+      actorAgentId: job.agentId,
+      roomId: job.roomId,
       action: "agent.run.failed",
       targetType: "agent_run",
-      targetId: run.id,
+      targetId: job.runId,
       metadata: { error: error instanceof Error ? error.message : error },
     });
     throw error;
   }
+}
+
+export async function runAgent(input: RunAgentInput) {
+  const started = await startAgentRun(input);
+  const completed = await completeAgentRun(started.job);
+  return { ...completed, inputMessage: started.inputMessage };
+}
+
+async function getExistingInputMessage(roomId: string, inputMessageId: string) {
+  const source = getSource();
+  const inputMessage = (await source.listMessages(roomId)).find((message) => message.id === inputMessageId);
+  if (!inputMessage || inputMessage.roomId !== roomId) {
+    throw new Error("연결할 입력 메시지를 찾을 수 없습니다.");
+  }
+  return inputMessage;
+}
+
+async function getRunStartupContext(job: AgentRunJob) {
+  if (job.mode !== "meeting_guest" || !job.guestSourceRoomId) {
+    return getAgentStartupContext(job.roomId, job.mode, { messageLimit: 40 });
+  }
+
+  const [meetingContext, sourceRoomContext] = await Promise.all([
+    getAgentStartupContext(job.roomId, job.mode, { messageLimit: 80 }),
+    getAgentStartupContext(job.guestSourceRoomId, "room", { messageLimit: 30 }),
+  ]);
+
+  return {
+    mode: job.mode,
+    instruction:
+      "메인 회의방의 사람 발언과 다른 봇 발언을 함께 읽고, 담당 업무방 관점에서 동의점, 우려점, 다음 행동을 제안한다.",
+    meetingRoom: meetingContext,
+    sourceRoom: sourceRoomContext,
+  };
+}
+
+function agentRunErrorMessage(error: unknown) {
+  if (error instanceof AnthropicApiError) {
+    const requestId = error.requestId ? ` 요청 ID: ${error.requestId}` : "";
+    return `Anthropic API가 일시적으로 실패했습니다. 잠시 후 다시 시도해 주세요. (${error.method} ${error.path}, ${error.status})${requestId}`;
+  }
+  return error instanceof Error ? error.message : "Unknown error";
 }

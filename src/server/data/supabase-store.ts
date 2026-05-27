@@ -789,6 +789,7 @@ export const supabaseStore = {
     sizeBytes?: number | null;
     mimeType?: string | null;
     checksum?: string | null;
+    agentRunId?: string | null;
   }) {
     const { data, error } = await db()
       .from("files")
@@ -811,6 +812,7 @@ export const supabaseStore = {
         version_no: 1,
         storage_path: input.storagePath,
         created_by: input.uploadedBy ?? null,
+        agent_run_id: input.agentRunId ?? null,
         change_summary: "Initial upload",
       });
     assertOk(versionInsert.data, versionInsert.error);

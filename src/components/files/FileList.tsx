@@ -1,5 +1,7 @@
 import { FileText } from "lucide-react";
+import { FileDeleteButton } from "@/components/files/FileDeleteButton";
 import { FileDownloadButton } from "@/components/files/FileDownloadButton";
+import { FileShareToMeetingButton } from "@/components/files/FileShareToMeetingButton";
 import { FileUploadForm } from "@/components/files/FileUploadForm";
 import { WarmCard } from "@/components/layout/WarmCard";
 import type { FileRecord } from "@/types/domain";
@@ -20,7 +22,11 @@ export function FileList({ files, roomId }: { files: FileRecord[]; roomId: strin
                 <p className="truncate text-sm font-medium">{file.originalName}</p>
                 <p className="text-xs text-ink-soft tabular-nums">v{file.versionNo} · {Math.round(file.sizeBytes / 1024)}KB · {file.accessLevel}</p>
               </div>
+              {roomId !== "meeting" ? (
+                <FileShareToMeetingButton fileId={file.id} roomId={roomId} fileName={file.originalName} />
+              ) : null}
               <FileDownloadButton fileId={file.id} roomId={roomId} />
+              {file.accessLevel !== "read" ? <FileDeleteButton fileId={file.id} roomId={roomId} fileName={file.originalName} /> : null}
             </div>
           ))
         ) : (

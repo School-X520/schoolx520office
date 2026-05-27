@@ -1,4 +1,4 @@
-import type { AgentRunMode } from "@/types/domain";
+import type { AgentRunMode, FileRecord } from "@/types/domain";
 
 export type AgentMemoryAttachment = {
   roomId: string;
@@ -19,6 +19,7 @@ export type AgentStreamEvent = {
 };
 
 export type AgentRunInput = {
+  agentRunId: string;
   roomId: string;
   agentId: string;
   userId: string;
@@ -34,6 +35,7 @@ export type AgentRunResult = {
   anthropicSessionId?: string | null;
   tokenUsage?: Record<string, unknown>;
   events?: AgentStreamEvent[];
+  generatedFiles?: FileRecord[];
   requiresAction?: boolean;
 };
 

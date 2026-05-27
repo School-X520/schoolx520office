@@ -19,10 +19,13 @@ export default async function OfficePage() {
     }
     throw error;
   });
-  const view = await getOfficeView(user.userId);
   const source = shouldUseMockData() ? mockStore : supabaseStore;
-  const activeMeeting = (await source.listVideoMeetings("meeting")).find((meeting) => meeting.status !== "ended") ?? null;
-  const sharedItems = await source.listSharedItems("meeting");
+  const [view, videoMeetings, sharedItems] = await Promise.all([
+    getOfficeView(user.userId),
+    source.listVideoMeetings("meeting"),
+    source.listSharedItems("meeting"),
+  ]);
+  const activeMeeting = videoMeetings.find((meeting) => meeting.status !== "ended") ?? null;
 
   return (
     <AppShell
