@@ -29,7 +29,7 @@ export default async function LoginPage({
           <span className="mx-auto mb-4 inline-flex size-14 items-center justify-center rounded-xl bg-gold-soft text-3xl">
             🏛️
           </span>
-          <h1 className="text-2xl font-semibold text-balance">교과연구회 AI Office</h1>
+          <h1 className="text-2xl font-semibold text-balance">School-X 교사연구회 AI Office</h1>
           <p className="mt-2 text-sm text-pretty text-ink-soft">관리자에게 승인된 Google 계정만 접근할 수 있습니다.</p>
         </div>
         {params.error === "not-approved" ? (

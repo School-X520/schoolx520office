@@ -21,34 +21,54 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       action?: string;
       roomId?: string;
+      roomIds?: string[];
       targetUserId?: string;
       role?: RoomRole;
     };
-    if (!body.roomId || !body.targetUserId) {
-      return jsonOk({ ok: false, message: "roomId와 targetUserId가 필요합니다." }, { status: 400 });
+    const roomIds = Array.from(
+      new Set(
+        (Array.isArray(body.roomIds) && body.roomIds.length ? body.roomIds : body.roomId ? [body.roomId] : [])
+          .map((roomId) => roomId.trim())
+          .filter(Boolean),
+      ),
+    );
+    if (!roomIds.length || !body.targetUserId) {
+      return jsonOk({ ok: false, message: "roomIds와 targetUserId가 필요합니다." }, { status: 400 });
     }
     const source = shouldUseMockData() ? mockStore : supabaseStore;
     const action = body.action ?? "membership.updated";
-    const membership =
-      shouldUseMockData() || action === "membership.removed"
-        ? null
-        : await supabaseStore.upsertMembership({
-            userId: body.targetUserId,
-            roomId: body.roomId,
-            role: body.role ?? "member",
-          });
-    if (!shouldUseMockData() && action === "membership.removed") {
-      await supabaseStore.deleteMembership({ userId: body.targetUserId, roomId: body.roomId });
+    const memberships = [];
+    for (const roomId of roomIds) {
+      if (action === "membership.removed") {
+        if (shouldUseMockData()) {
+          mockStore.deleteMembership({ userId: body.targetUserId, roomId });
+        } else {
+          await supabaseStore.deleteMembership({ userId: body.targetUserId, roomId });
+        }
+      } else {
+        const membership = shouldUseMockData()
+          ? mockStore.upsertMembership({
+              userId: body.targetUserId,
+              roomId,
+              role: body.role ?? "member",
+            })
+          : await supabaseStore.upsertMembership({
+              userId: body.targetUserId,
+              roomId,
+              role: body.role ?? "member",
+            });
+        memberships.push(membership);
+      }
+      await source.addAuditLog({
+        actorUserId: user.userId,
+        roomId,
+        action,
+        targetType: "room_membership",
+        targetId: body.targetUserId,
+        metadata: { role: body.role ?? "member", mockOnly: shouldUseMockData() },
+      });
     }
-    await source.addAuditLog({
-      actorUserId: user.userId,
-      roomId: body.roomId,
-      action,
-      targetType: "room_membership",
-      targetId: body.targetUserId,
-      metadata: { role: body.role ?? "member", mockOnly: shouldUseMockData() },
-    });
-    return jsonOk({ ok: true, membership });
+    return jsonOk({ ok: true, memberships });
   } catch (error) {
     return jsonError(error);
   }

@@ -9,6 +9,9 @@ import {
   rooms as seedRooms,
 } from "@/lib/mock-data";
 import type {
+  Agent,
+  AgentPersona,
+  AgentPersonaVersion,
   AgentRun,
   AgentRunEvent,
   AuditLog,
@@ -17,6 +20,7 @@ import type {
   FileRecord,
   MeetingImport,
   MemoryWriteReview,
+  RoomMembership,
   RoomMemoryStore,
   RoomMessage,
   RoomThread,
@@ -55,6 +59,10 @@ function id() {
 
 function now() {
   return new Date().toISOString();
+}
+
+function isTaskVisibleInRoom(task: Task, roomId: string) {
+  return task.roomId === roomId || task.assigneeRoomId === roomId;
 }
 
 function initialThreads(): RoomThread[] {
@@ -96,7 +104,7 @@ function initialMessages(threads: RoomThread[]): RoomMessage[] {
       senderAgentId: null,
       agentRunId: null,
       type: "human",
-      content: "과학관 과제 예산 초안을 회의방에 공유할 준비가 필요합니다.",
+      content: "과학관 AI교육 연구회 예산 초안을 회의방에 공유할 준비가 필요합니다.",
       metadata: {},
       createdAt: now(),
     },
@@ -152,6 +160,7 @@ function initialState(): MockState {
         createdBy: mockUser.userId,
         createdAt: now(),
         updatedAt: now(),
+        metadata: {},
       },
     ],
     auditLogs: [],
@@ -183,7 +192,7 @@ export const mockStore = {
   },
 
   listRooms() {
-    return seedRooms;
+    return seedRooms.filter((room) => room.isActive);
   },
 
   getRoom(roomId: string) {
@@ -191,7 +200,7 @@ export const mockStore = {
   },
 
   listAgents() {
-    return seedAgents;
+    return seedAgents.filter((agent) => agent.isActive);
   },
 
   getAgentByRoom(roomId: string) {
@@ -202,8 +211,81 @@ export const mockStore = {
     return seedAgents.find((agent) => agent.id === agentId) ?? null;
   },
 
+  updateAgentPersona(
+    agentId: string,
+    input: {
+      personaDraft?: AgentPersona;
+      personaPublished?: AgentPersona;
+      updatedBy?: string | null;
+      publishedBy?: string | null;
+      metadata?: Record<string, unknown>;
+      anthropicAgentVersion?: number | null;
+    },
+  ) {
+    const agent = seedAgents.find((item) => item.id === agentId) as Agent | undefined;
+    if (!agent) {
+      return null;
+    }
+    const timestamp = now();
+    agent.personaDraft = input.personaDraft ?? agent.personaDraft;
+    agent.personaPublished = input.personaPublished ?? agent.personaPublished;
+    agent.personaDraftUpdatedBy = input.personaDraft ? input.updatedBy ?? null : agent.personaDraftUpdatedBy ?? null;
+    agent.personaDraftUpdatedAt = input.personaDraft ? timestamp : agent.personaDraftUpdatedAt ?? null;
+    agent.personaPublishedBy = input.personaPublished ? input.publishedBy ?? null : agent.personaPublishedBy ?? null;
+    agent.personaPublishedAt = input.personaPublished ? timestamp : agent.personaPublishedAt ?? null;
+    if (input.personaPublished) {
+      agent.systemPrompt = input.personaPublished.role;
+      agent.guestPrompt = input.personaPublished.guestPrompt;
+    }
+    agent.metadata = {
+      ...agent.metadata,
+      ...(input.metadata ?? {}),
+      persona_draft: agent.personaDraft,
+      persona_published: agent.personaPublished,
+      anthropic_agent_version: input.anthropicAgentVersion ?? agent.metadata.anthropic_agent_version ?? null,
+    };
+    agent.updatedAt = timestamp;
+    return agent;
+  },
+
+  addAgentPersonaVersion(input: Omit<AgentPersonaVersion, "id" | "createdAt"> & Partial<AgentPersonaVersion>) {
+    return {
+      id: id(),
+      agentId: input.agentId,
+      roomId: input.roomId,
+      versionNo: input.versionNo,
+      persona: input.persona,
+      anthropicAgentId: input.anthropicAgentId ?? null,
+      anthropicAgentVersion: input.anthropicAgentVersion ?? null,
+      publishedBy: input.publishedBy ?? null,
+      createdAt: now(),
+      metadata: input.metadata ?? {},
+    } satisfies AgentPersonaVersion;
+  },
+
   listAllowedUsers() {
     return seedAllowedUsers;
+  },
+
+  getAllowedUser(email: string) {
+    return seedAllowedUsers.find((user) => user.email === email.toLowerCase()) ?? null;
+  },
+
+  updateAllowedUser(email: string, patch: { isActive?: boolean; isAdmin?: boolean; notes?: string | null }) {
+    const user = seedAllowedUsers.find((item) => item.email === email.toLowerCase());
+    if (!user) {
+      return null;
+    }
+    if (typeof patch.isActive === "boolean") {
+      user.isActive = patch.isActive;
+    }
+    if (typeof patch.isAdmin === "boolean") {
+      user.isAdmin = patch.isAdmin;
+    }
+    if ("notes" in patch) {
+      user.notes = patch.notes ?? null;
+    }
+    return user;
   },
 
   listUserProfiles() {
@@ -219,6 +301,35 @@ export const mockStore = {
       return seedMemberships.find((membership) => membership.userId === userId && membership.roomId === "meeting") ?? null;
     }
     return seedMemberships.find((membership) => membership.userId === userId && membership.roomId === roomId) ?? null;
+  },
+
+  upsertMembership(input: { userId: string; roomId: string; role: RoomMembership["role"] }) {
+    const existing = seedMemberships.find(
+      (membership) => membership.userId === input.userId && membership.roomId === input.roomId,
+    );
+    if (existing) {
+      existing.role = input.role;
+      return existing;
+    }
+    const membership: RoomMembership = {
+      userId: input.userId,
+      roomId: input.roomId,
+      role: input.role,
+      joinedAt: now(),
+    };
+    seedMemberships.push(membership);
+    return membership;
+  },
+
+  deleteMembership(input: { userId: string; roomId: string }) {
+    const index = seedMemberships.findIndex(
+      (membership) => membership.userId === input.userId && membership.roomId === input.roomId,
+    );
+    if (index === -1) {
+      return { ok: false };
+    }
+    seedMemberships.splice(index, 1);
+    return { ok: true };
   },
 
   listThreads(roomId: string) {
@@ -465,6 +576,20 @@ export const mockStore = {
     return item;
   },
 
+  updateImport(importId: string, patch: Partial<MeetingImport>) {
+    const item = state().imports.find((meetingImport) => meetingImport.id === importId);
+    if (!item) {
+      return null;
+    }
+    Object.assign(item, patch, {
+      metadata: {
+        ...item.metadata,
+        ...(patch.metadata ?? {}),
+      },
+    });
+    return item;
+  },
+
   listDecisions(roomId?: string) {
     return state().decisions.filter((decision) => !roomId || decision.roomId === roomId);
   },
@@ -483,11 +608,26 @@ export const mockStore = {
     return decision;
   },
 
-  listTasks(roomId?: string) {
-    return state().tasks.filter((task) => !roomId || task.roomId === roomId || task.assigneeRoomId === roomId);
+  updateDecision(decisionId: string, patch: Partial<Decision>) {
+    const decision = state().decisions.find((item) => item.id === decisionId);
+    if (!decision) {
+      return null;
+    }
+    Object.assign(decision, patch);
+    return decision;
   },
 
-  createTask(input: Omit<Task, "id" | "createdAt" | "updatedAt" | "status"> & Partial<Task>) {
+  deleteDecision(decisionId: string) {
+    const before = state().decisions.length;
+    state().decisions = state().decisions.filter((decision) => decision.id !== decisionId);
+    return state().decisions.length < before;
+  },
+
+  listTasks(roomId?: string) {
+    return state().tasks.filter((task) => !roomId || isTaskVisibleInRoom(task, roomId));
+  },
+
+  createTask(input: Omit<Task, "id" | "createdAt" | "updatedAt" | "status" | "metadata"> & Partial<Task>) {
     const task: Task = {
       id: id(),
       roomId: input.roomId,
@@ -501,6 +641,7 @@ export const mockStore = {
       createdBy: input.createdBy ?? mockUser.userId,
       createdAt: now(),
       updatedAt: now(),
+      metadata: input.metadata ?? {},
     };
     state().tasks.push(task);
     return task;

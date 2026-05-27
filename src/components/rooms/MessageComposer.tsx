@@ -6,8 +6,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 import type { Agent, AgentRun, RoomMessage } from "@/types/domain";
 
-type SubmitKind = "message" | "resident_agent" | "guest_agent";
-
 export function MessageComposer({
   roomId,
   threadId,
@@ -36,10 +34,15 @@ export function MessageComposer({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [botEnabled, setBotEnabled] = useState(() => Boolean(!isMeeting && residentAgent));
   const [selectedGuestAgentIds, setSelectedGuestAgentIds] = useState<string[]>([]);
-  const defaultKind: SubmitKind = !isMeeting && residentAgent && botEnabled ? "resident_agent" : "message";
   const selectedGuestAgents = guestAgents.filter((agent) => selectedGuestAgentIds.includes(agent.id));
+  const selectedRoomAgents = isMeeting
+    ? []
+    : [
+        ...(residentAgent && botEnabled ? [residentAgent] : []),
+        ...selectedGuestAgents,
+      ];
 
-  async function submit(kind: SubmitKind = defaultKind, guestAgent?: Agent) {
+  async function submit() {
     const content = value.trim();
 
     if (!content || isSubmitting) {
@@ -57,54 +60,44 @@ export function MessageComposer({
         await submitMeetingMessage(content, optimisticMessage.id);
         return;
       }
-
-      const isAgentRun = kind === "resident_agent" || kind === "guest_agent";
-      const endpoint = isAgentRun ? `/api/rooms/${roomId}/agent-runs` : `/api/rooms/${roomId}/messages`;
-      const body =
-        kind === "resident_agent" && residentAgent
-          ? { message: content, threadId, mode: "room", agentId: residentAgent.id }
-          : kind === "guest_agent" && guestAgent
-            ? {
-                message: content,
-                threadId,
-                mode: "meeting_guest",
-                agentId: guestAgent.id,
-                guestSourceRoomId: guestAgent.roomId,
-              }
-            : { content, threadId };
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      const payload = (await response.json()) as {
-        error?: string;
-        message?: RoomMessage;
-        inputMessage?: RoomMessage;
-        outputMessage?: RoomMessage;
-        run?: AgentRun;
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "전송에 실패했습니다.");
-      }
-
-      const committedMessages =
-        kind === "message"
-          ? [payload.message].filter((message): message is RoomMessage => Boolean(message))
-          : [payload.inputMessage, payload.outputMessage].filter((message): message is RoomMessage => Boolean(message));
-
-      onMessagesCommitted(optimisticMessage.id, committedMessages);
-      if (payload.run && !payload.outputMessage) {
-        onAgentRunQueued(payload.run);
-      }
+      await submitRoomMessage(content, optimisticMessage.id);
     } catch (submitError) {
       onMessageFailed(optimisticMessage.id);
       setError(submitError instanceof Error ? submitError.message : "전송에 실패했습니다.");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function submitRoomMessage(content: string, optimisticId: string) {
+    const messageResponse = await fetch(`/api/rooms/${roomId}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content, threadId }),
+    });
+    const messagePayload = (await messageResponse.json()) as { error?: string; message?: RoomMessage };
+    if (!messageResponse.ok || !messagePayload.message) {
+      throw new Error(messagePayload.error ?? "전송에 실패했습니다.");
+    }
+
+    onMessagesCommitted(optimisticId, [messagePayload.message]);
+
+    if (!selectedRoomAgents.length) {
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      selectedRoomAgents.map((agent) => startRoomAgentRun(agent, content, messagePayload.message!.id)),
+    );
+    const failedCount = results.filter((result) => result.status === "rejected").length;
+    results.forEach((result) => {
+      if (result.status === "fulfilled" && result.value.run) {
+        onAgentRunQueued(result.value.run);
+      }
+    });
+
+    if (failedCount) {
+      setError(`${failedCount}개 봇 호출에 실패했습니다. 나머지 봇 응답은 계속 처리됩니다.`);
     }
   }
 
@@ -160,6 +153,25 @@ export function MessageComposer({
     return payload;
   }
 
+  async function startRoomAgentRun(agent: Agent, content: string, inputMessageId: string) {
+    const response = await fetch(`/api/rooms/${roomId}/agent-runs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        message: content,
+        threadId,
+        inputMessageId,
+        mode: "room",
+        agentId: agent.id,
+      }),
+    });
+    const payload = (await response.json()) as { error?: string; run?: AgentRun };
+    if (!response.ok || !payload.run) {
+      throw new Error(payload.error ?? `${agent.name} 호출에 실패했습니다.`);
+    }
+    return payload;
+  }
+
   function toggleGuestAgent(agentId: string) {
     setSelectedGuestAgentIds((current) =>
       current.includes(agentId) ? current.filter((id) => id !== agentId) : [...current, agentId],
@@ -169,35 +181,36 @@ export function MessageComposer({
   return (
     <div className="border-t border-line bg-card p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs font-medium text-ink-soft">
+        <div className="flex max-w-full flex-wrap items-center gap-2 text-xs font-medium text-ink-soft">
           {isMeeting ? (
             <>
               <Users className="size-3.5" />
               단체 채팅
             </>
           ) : residentAgent ? (
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-line bg-paper/70 px-2 py-1">
-              <input
-                type="checkbox"
-                checked={botEnabled}
-                onChange={(event) => setBotEnabled(event.target.checked)}
-                className="peer sr-only"
-              />
-              <span
-                aria-hidden="true"
-                className="flex h-5 w-9 items-center rounded-full border border-line bg-card px-0.5 peer-checked:justify-end peer-checked:border-sage peer-checked:bg-sage"
-              >
-                <span className="size-4 rounded-full bg-white shadow-sm" />
-              </span>
-              <Bot className="size-3.5" />
-              <span>{residentAgent.name} 응답</span>
-            </label>
+            <AgentToggle
+              agent={residentAgent}
+              checked={botEnabled}
+              disabled={isSubmitting}
+              onChange={setBotEnabled}
+            />
           ) : (
             <>
               <Users className="size-3.5" />
               단체 채팅
             </>
           )}
+          {!isMeeting
+            ? guestAgents.map((agent) => (
+                <AgentToggle
+                  key={agent.id}
+                  agent={agent}
+                  checked={selectedGuestAgentIds.includes(agent.id)}
+                  disabled={isSubmitting}
+                  onChange={() => toggleGuestAgent(agent.id)}
+                />
+              ))
+            : null}
         </div>
         {isMeeting ? (
           guestAgents.length ? (
@@ -231,6 +244,11 @@ export function MessageComposer({
           {selectedGuestAgents.map((agent) => agent.name).join(", ")} 응답
         </p>
       ) : null}
+      {!isMeeting && selectedRoomAgents.length > 1 ? (
+        <p className="mb-2 text-xs text-ink-soft">
+          {selectedRoomAgents.map((agent) => agent.name).join(", ")} 응답
+        </p>
+      ) : null}
 
       <div className="flex items-end gap-2">
         <textarea
@@ -245,8 +263,8 @@ export function MessageComposer({
           placeholder={
             isMeeting
               ? "회의방에 메시지 보내기"
-              : residentAgent && botEnabled
-                ? `${residentAgent.name}에게 메시지 보내기`
+              : selectedRoomAgents.length
+                ? `${selectedRoomAgents.map((agent) => agent.name).join(", ")}에게 메시지 보내기`
                 : "단체 채팅에 메시지 보내기"
           }
           className="max-h-32 min-h-11 flex-1 resize-none rounded-lg border border-line bg-white/70 px-3 py-2 text-sm text-ink shadow-sm placeholder:text-ink-soft/60 focus-visible:outline-2 focus-visible:outline-offset-2"
@@ -263,6 +281,38 @@ export function MessageComposer({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function AgentToggle({
+  agent,
+  checked,
+  disabled,
+  onChange,
+}: {
+  agent: Agent;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-line bg-paper/70 px-2 py-1">
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="peer sr-only"
+      />
+      <span
+        aria-hidden="true"
+        className="flex h-5 w-9 items-center rounded-full border border-line bg-card px-0.5 peer-checked:justify-end peer-checked:border-sage peer-checked:bg-sage peer-disabled:opacity-55"
+      >
+        <span className="size-4 rounded-full bg-white shadow-sm" />
+      </span>
+      <Bot className="size-3.5" />
+      <span>{agent.name} 응답</span>
+    </label>
   );
 }
 

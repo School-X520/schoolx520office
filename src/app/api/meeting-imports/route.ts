@@ -25,20 +25,28 @@ export async function POST(request: Request) {
     const user = await requireUser();
     const body = (await request.json()) as {
       targetRoomId?: string;
+      targetRoomIds?: string[];
       sharedItemId?: string;
       sourceMessageId?: string;
       sourceFileId?: string;
       summary?: string;
     };
-    const item = await importMeetingMessageToRoom({
-      userId: user.userId,
-      targetRoomId: body.targetRoomId ?? "research",
-      sharedItemId: body.sharedItemId,
-      sourceMessageId: body.sourceMessageId,
-      sourceFileId: body.sourceFileId,
-      summary: body.summary,
-    });
-    return jsonOk({ meetingImport: item });
+    const targetRoomIds = Array.isArray(body.targetRoomIds) && body.targetRoomIds.length
+      ? [...new Set(body.targetRoomIds.filter(Boolean))]
+      : [body.targetRoomId ?? "research"];
+    const imports = await Promise.all(
+      targetRoomIds.map((targetRoomId) =>
+        importMeetingMessageToRoom({
+          userId: user.userId,
+          targetRoomId,
+          sharedItemId: body.sharedItemId,
+          sourceMessageId: body.sourceMessageId,
+          sourceFileId: body.sourceFileId,
+          summary: body.summary,
+        }),
+      ),
+    );
+    return jsonOk({ meetingImport: imports[0], imports });
   } catch (error) {
     return jsonError(error);
   }

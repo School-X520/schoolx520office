@@ -1,7 +1,8 @@
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { OpsDashboard } from "@/components/admin/OpsDashboard";
 import { shouldUseMockData } from "@/lib/env";
-import { AuthError } from "@/server/auth/errors";
+import { AuthError, ForbiddenError } from "@/server/auth/errors";
 import { requireAdmin } from "@/server/auth/require-user";
 import { redirectToLogin } from "@/server/auth/redirect-to-login";
 import { getOfficeView } from "@/server/rooms/get-room-view";
@@ -15,6 +16,9 @@ export default async function OpsPage() {
   const user = await requireAdmin().catch((error) => {
     if (error instanceof AuthError) {
       return redirectToLogin("/admin/ops");
+    }
+    if (error instanceof ForbiddenError) {
+      redirect("/office");
     }
     throw error;
   });

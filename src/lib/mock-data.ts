@@ -11,7 +11,7 @@ const now = "2026-05-08T00:00:00.000Z";
 
 export const mockUser: UserProfile = {
   userId: "00000000-0000-4000-8000-000000000001",
-  email: "admin@example.com",
+  email: "devyongt@gmail.com",
   displayName: "총괄 관리자",
   avatarUrl: null,
   isAdmin: true,
@@ -113,23 +113,23 @@ export const rooms: Room[] = [
   },
   {
     id: "city_research",
-    name: "시교육연구회 과제",
+    name: "비활성 프로젝트방",
     type: "project",
     icon: "🏫",
-    description: "시교육연구회 과제 산출물과 제출 흐름을 관리합니다.",
+    description: "향후 재사용을 위해 비활성화된 프로젝트 방입니다.",
     defaultModel: "claude-sonnet-4-5",
     displayOrder: 7,
     layoutX: 1,
     layoutY: 4,
-    isActive: true,
+    isActive: false,
     createdAt: now,
   },
   {
     id: "province_research",
-    name: "도교육연구회 과제",
+    name: "경기도교육연구회",
     type: "project",
     icon: "🏢",
-    description: "도교육연구회 과제 산출물과 협의 내용을 관리합니다.",
+    description: "경기도교육연구회 산출물과 협의 내용을 관리합니다.",
     defaultModel: "claude-sonnet-4-5",
     displayOrder: 8,
     layoutX: 2,
@@ -139,10 +139,10 @@ export const rooms: Room[] = [
   },
   {
     id: "science_museum",
-    name: "과학관 과제",
+    name: "과학관 AI교육 연구회",
     type: "project",
     icon: "🔭",
-    description: "과학관 협력 과제, 전시/체험 운영 자료를 정리합니다.",
+    description: "과학관 AI교육 연구회 운영, 협력 과제, 전시/체험 자료를 정리합니다.",
     defaultModel: "claude-sonnet-4-5",
     displayOrder: 9,
     layoutX: 3,
@@ -159,25 +159,45 @@ const botNames: Record<string, string> = {
   development: "개발봇",
   research: "연구봇",
   promotion: "홍보봇",
-  city_research: "시교육봇",
+  city_research: "예비봇",
   province_research: "도교육봇",
   science_museum: "과학관봇",
 };
 
+const developmentBotRole =
+  "모든 업무방에 상주하며 담당자와 도메인 봇의 대화를 바탕으로 School-X 교사연구회 플랫폼 개선안을 제안하는 개발 봇";
+
+const developmentBotSystemPrompt = [
+  "School-X 교사연구회 AI Office의 개발봇이다.",
+  "모든 업무방의 담당자와 도메인 봇 대화를 관찰 가능한 프로젝트 맥락으로 읽고, 시스템을 더 잘 개발할 방법을 제안한다.",
+  "각 방의 업무 흐름, 반복되는 불편, 필요한 자동화, 데이터 구조 개선, 권한/보안 리스크, UI 개선점을 찾아 실행 가능한 개발 계획으로 정리한다.",
+  "전체 프로젝트 진행 상황을 요약하고, 방별 이슈와 공통 병목을 구분해 보고한다.",
+  "학생 개인정보와 민감정보는 최소한으로 다루고, 개선 제안에는 필요한 근거와 영향을 함께 적는다.",
+].join(" ");
+
+const developmentBotGuestPrompt =
+  "어느 방에서 호출되든 플랫폼 개선 관점으로 현재 논의의 시스템화 가능성, 개발 작업 후보, 전체 프로젝트 영향만 짧게 제안한다.";
+
 export const agents: Agent[] = rooms
-  .filter((room) => room.id !== "meeting")
+  .filter((room) => room.id !== "meeting" && room.isActive)
   .map((room) => ({
     id: `${room.id}_bot`,
     roomId: room.id,
     name: botNames[room.id],
-    role: `${room.name} 업무를 총괄하는 도메인 봇`,
+    role: room.id === "development" ? developmentBotRole : `${room.name} 업무를 총괄하는 도메인 봇`,
     anthropicAgentId: null,
     anthropicEnvironmentId: null,
     defaultModel: room.defaultModel ?? "claude-sonnet-4-5",
-    systemPrompt: `${room.name} 업무를 총괄한다. 개인정보와 민감정보를 무단 공유하지 않고, 불확실한 내용은 확인 질문으로 남긴다.`,
-    guestPrompt: "회의방에서는 5문장 이내로 출처와 다음 행동을 포함해 브리핑한다.",
+    systemPrompt:
+      room.id === "development"
+        ? developmentBotSystemPrompt
+        : `${room.name} 업무를 총괄한다. 개인정보와 민감정보를 무단 공유하지 않고, 불확실한 내용은 확인 질문으로 남긴다.`,
+    guestPrompt:
+      room.id === "development"
+        ? developmentBotGuestPrompt
+        : "회의방에서는 5문장 이내로 출처와 다음 행동을 포함해 브리핑한다.",
     isActive: true,
-    metadata: {},
+    metadata: room.id === "development" ? { global_room_observer: true } : {},
     createdAt: now,
     updatedAt: now,
   }));
@@ -187,7 +207,7 @@ export const allowedUsers: AllowedUser[] = [
     email: mockUser.email,
     invitedBy: null,
     invitedAt: now,
-    notes: "Mock admin. 실제 운영 전 관리자 이메일로 교체하세요.",
+    notes: "Initial School-X administrator.",
     isActive: true,
     isAdmin: true,
   },

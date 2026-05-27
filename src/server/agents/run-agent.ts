@@ -5,11 +5,16 @@ import { AnthropicApiError } from "@/lib/anthropic/managed-agents-api";
 import { getAgentAdapter } from "@/server/agents/get-agent-adapter";
 import { finalizeAgentRun } from "@/server/agents/finalize-agent-run";
 import { createRoomMessage } from "@/server/messages/room-message-service";
-import { getAgentMemoryAttachments, getAgentStartupContext } from "@/server/memory/domain-memory-service";
+import {
+  getAgentMemoryAttachments,
+  getAgentStartupContext,
+  getProjectObserverContext,
+} from "@/server/memory/domain-memory-service";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { requireRoomMember } from "@/server/auth/require-room-member";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
+import { isDevelopmentAgent } from "@/lib/agents/development-agent";
 import type { AgentRun, AgentRunMode, AgentRunType, RoomMessage } from "@/types/domain";
 
 type RunAgentInput = {
@@ -65,7 +70,7 @@ export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentR
       throw new Error("게스트 봇 호출은 메인 회의방에서만 가능합니다.");
     }
     await requireRoomMember(input.userId, guestSourceRoomId ?? agent.roomId);
-  } else if (agent.roomId !== input.roomId) {
+  } else if (agent.roomId !== input.roomId && !isDevelopmentAgent(agent)) {
     throw new Error("이 방의 상주 봇만 호출할 수 있습니다.");
   }
 
@@ -223,6 +228,37 @@ async function getExistingInputMessage(roomId: string, inputMessageId: string) {
 }
 
 async function getRunStartupContext(job: AgentRunJob) {
+  const source = getSource();
+  const agent = job.agentId ? await source.getAgent(job.agentId) : null;
+  if (isDevelopmentAgent(agent)) {
+    const [currentRoomContext, developmentRoomContext, projectOverview] = await Promise.all([
+      getAgentStartupContext(job.roomId, job.mode, { threadId: job.threadId, messageLimit: 24 }),
+      agent?.roomId && agent.roomId !== job.roomId
+        ? getAgentStartupContext(agent.roomId, "room", { messageLimit: 0 })
+        : Promise.resolve(null),
+      getProjectObserverContext(job.userId, {
+        currentRoomId: job.roomId,
+        currentThreadId: job.threadId,
+        messageLimitPerRoom: 4,
+      }),
+    ]);
+
+    return {
+      mode: job.mode,
+      instruction:
+        "개발봇은 모든 접근 가능 업무방의 흐름을 관찰 가능한 프로젝트 맥락으로 읽고, 담당자와 도메인 봇의 대화에서 플랫폼 개선 기회, 구현 계획, 리스크, 전체 진행 상황을 제안한다. 토글이 꺼져 있을 때는 발언하지 않지만, 호출되면 누적된 방 대화와 요약을 근거로 답한다.",
+      developmentAgent: {
+        globalObserver: true,
+        homeRoomId: agent?.roomId ?? null,
+        activeRoomId: job.roomId,
+        currentThreadId: job.threadId,
+      },
+      currentRoom: currentRoomContext,
+      developmentRoom: developmentRoomContext,
+      projectOverview,
+    };
+  }
+
   if (job.mode !== "meeting_guest" || !job.guestSourceRoomId) {
     return getAgentStartupContext(job.roomId, job.mode, { threadId: job.threadId, messageLimit: 18 });
   }
@@ -242,6 +278,16 @@ async function getRunStartupContext(job: AgentRunJob) {
 }
 
 async function getRunMemoryAttachments(job: AgentRunJob) {
+  const source = getSource();
+  const agent = job.agentId ? await source.getAgent(job.agentId) : null;
+  if (isDevelopmentAgent(agent)) {
+    const roomIds = [job.roomId, agent?.roomId].filter((roomId): roomId is string => Boolean(roomId));
+    const attachments = await Promise.all(
+      [...new Set(roomIds)].map((roomId) => getAgentMemoryAttachments(roomId, "read_only")),
+    );
+    return attachments.flat();
+  }
+
   if (job.mode === "meeting_guest" && job.guestSourceRoomId) {
     const [meeting, sourceRoom] = await Promise.all([
       getAgentMemoryAttachments(job.roomId, "read_only"),

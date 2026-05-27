@@ -30,6 +30,13 @@ export type VideoProviderId = "google_meet" | "zoom";
 
 export type JsonObject = Record<string, unknown>;
 
+export type OperationStatusSnapshot = {
+  sharedCount: number;
+  briefingCount: number;
+  taskCount: number;
+  updatedAt: string;
+};
+
 export type Room = {
   id: string;
   name: string;
@@ -94,10 +101,39 @@ export type Agent = {
   defaultModel: string;
   systemPrompt: string;
   guestPrompt: string;
+  personaDraft?: AgentPersona;
+  personaPublished?: AgentPersona;
+  personaDraftUpdatedBy?: string | null;
+  personaDraftUpdatedAt?: string | null;
+  personaPublishedBy?: string | null;
+  personaPublishedAt?: string | null;
   isActive: boolean;
   metadata: JsonObject;
   createdAt: string;
   updatedAt: string;
+};
+
+export type AgentPersona = {
+  role: string;
+  tone: string;
+  outputStyle: string;
+  priorities: string;
+  boundaries: string;
+  customInstructions: string;
+  guestPrompt: string;
+};
+
+export type AgentPersonaVersion = {
+  id: string;
+  agentId: string;
+  roomId: string;
+  versionNo: number;
+  persona: AgentPersona;
+  anthropicAgentId?: string | null;
+  anthropicAgentVersion?: number | null;
+  publishedBy?: string | null;
+  createdAt: string;
+  metadata: JsonObject;
 };
 
 export type RoomMessage = {
@@ -182,7 +218,9 @@ export type FileRecord = {
 export type SharedItem = {
   id: string;
   sourceRoomId: string;
+  sourceRoomName?: string | null;
   targetRoomId: string;
+  targetRoomName?: string | null;
   sourceMessageId?: string | null;
   sourceFileId?: string | null;
   title: string;
@@ -228,6 +266,7 @@ export type Task = {
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
+  metadata: JsonObject;
 };
 
 export type AuditLog = {
@@ -315,6 +354,7 @@ export type RoomViewModel = {
   room: Room;
   agent?: Agent;
   guestAgents?: Agent[];
+  taskTargetRooms: Room[];
   membership?: RoomMembership;
   memory: DomainMemory;
   threads: RoomThread[];

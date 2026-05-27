@@ -1,5 +1,10 @@
 import "server-only";
 
+import { execFile } from "node:child_process";
+import { mkdir, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { shouldUseMockData } from "@/lib/env";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getManagedAgentsClientFromEnv, type AnthropicFileMetadata } from "@/lib/anthropic/managed-agents-api";
@@ -13,6 +18,7 @@ const DEFAULT_AGENT_MOUNT_FILE_LIMIT = 20;
 const DEFAULT_AGENT_MOUNT_MAX_FILE_BYTES = 25 * 1024 * 1024;
 const DEFAULT_READ_FILE_MAX_CHARS = 16_000;
 const MAX_READ_FILE_BYTES = 20 * 1024 * 1024;
+const execFileAsync = promisify(execFile);
 
 export type MountedAgentFile = {
   roomId: string;
@@ -39,6 +45,10 @@ function safeName(name: string) {
 
 function displayFileName(name: string) {
   return name.split("/").filter(Boolean).pop()?.replace(/[\r\n]/g, "_").trim() || "agent-file.txt";
+}
+
+function localFileName(name: string) {
+  return displayFileName(name).replace(/[/:\\]/g, "_");
 }
 
 export function agentFileMountPath(roomId: string, file: Pick<FileRecord, "id" | "originalName">) {
@@ -459,6 +469,100 @@ export async function createSignedDownloadUrl(input: { userId: string; roomId: s
   return { file, signedUrl: data.signedUrl };
 }
 
+export function defaultLocalDownloadDir() {
+  return path.join(os.homedir(), "Downloads", "School-X");
+}
+
+export async function downloadRoomFileToLocalAndOpen(input: {
+  userId: string;
+  roomId: string;
+  fileId: string;
+  downloadDir?: string | null;
+}) {
+  await requireRoomMember(input.userId, input.roomId);
+  const files = shouldUseMockData() ? mockStore.listFiles(input.roomId) : await supabaseStore.listFiles(input.roomId);
+  const file = files.find((item) => item.id === input.fileId);
+  if (!file) {
+    throw statusError("파일을 찾을 수 없습니다.", 404);
+  }
+
+  const downloadDir = resolveLocalDownloadDir(input.downloadDir);
+  await mkdir(downloadDir, { recursive: true });
+  const filePath = await uniqueLocalFilePath(downloadDir, localFileName(file.originalName));
+  const bytes = shouldUseMockData()
+    ? Buffer.from(`${file.originalName} mock download`, "utf-8")
+    : Buffer.from(await downloadStoredFileBytes(file));
+  await writeFile(filePath, bytes);
+  await openLocalFile(filePath);
+
+  const auditSource = shouldUseMockData() ? mockStore : supabaseStore;
+  await auditSource.addAuditLog({
+    actorUserId: input.userId,
+    roomId: input.roomId,
+    action: "file.opened_locally",
+    targetType: "file",
+    targetId: file.id,
+    metadata: { filePath, originalName: file.originalName },
+  });
+
+  return { file, filePath, downloadDir };
+}
+
+export async function copyRoomFileToRoom(input: {
+  userId: string;
+  sourceRoomId: string;
+  sourceFileId: string;
+  targetRoomId: string;
+}) {
+  await requireRoomMember(input.userId, input.sourceRoomId);
+  const targetMembership = await requireRoomMember(input.userId, input.targetRoomId);
+  if (!canWriteRoom(targetMembership.role)) {
+    throw statusError("파일을 가져올 권한이 없습니다.", 403);
+  }
+
+  const sourceFiles = shouldUseMockData()
+    ? mockStore.listFiles(input.sourceRoomId)
+    : await supabaseStore.listFiles(input.sourceRoomId);
+  const sourceFile = sourceFiles.find((file) => file.id === input.sourceFileId);
+  if (!sourceFile) {
+    throw statusError("가져올 원본 파일을 찾을 수 없습니다.", 404);
+  }
+
+  const storagePath = copiedStoragePath(input.targetRoomId, sourceFile.originalName);
+  const copiedFile = shouldUseMockData()
+    ? mockStore.addFile({
+        storagePath,
+        originalName: sourceFile.originalName,
+        uploadedBy: input.userId,
+        sizeBytes: sourceFile.sizeBytes,
+        mimeType: sourceFile.mimeType,
+        checksum: sourceFile.checksum ?? null,
+        accessLevel: "owner",
+      })
+    : await copyStoredFileToRoom({
+        userId: input.userId,
+        targetRoomId: input.targetRoomId,
+        sourceFile,
+        storagePath,
+      });
+
+  const auditSource = shouldUseMockData() ? mockStore : supabaseStore;
+  await auditSource.addAuditLog({
+    actorUserId: input.userId,
+    roomId: input.targetRoomId,
+    action: "file.copied_from_meeting",
+    targetType: "file",
+    targetId: copiedFile.id,
+    metadata: {
+      sourceRoomId: input.sourceRoomId,
+      sourceFileId: input.sourceFileId,
+      originalName: sourceFile.originalName,
+    },
+  });
+
+  return copiedFile;
+}
+
 export async function createFileVersion(input: {
   userId: string;
   roomId: string;
@@ -505,6 +609,91 @@ export async function createFileVersion(input: {
 function agentGeneratedStoragePath(roomId: string, agentRunId: string, originalName: string) {
   const month = new Date().toISOString().slice(0, 7);
   return `${roomId}/${month}/agent-runs/${agentRunId}/${crypto.randomUUID()}-${safeName(originalName)}`;
+}
+
+function copiedStoragePath(roomId: string, originalName: string) {
+  const month = new Date().toISOString().slice(0, 7);
+  return `${roomId}/${month}/meeting-imports/${crypto.randomUUID()}-${safeName(originalName)}`;
+}
+
+async function copyStoredFileToRoom(input: {
+  userId: string;
+  targetRoomId: string;
+  sourceFile: FileRecord;
+  storagePath: string;
+}) {
+  const admin = getSupabaseAdminClient();
+  if (!admin) {
+    throw new Error("Supabase service role is not configured.");
+  }
+  const bytes = await downloadStoredFileBytes(input.sourceFile);
+  const { error } = await admin.storage
+    .from(WORKSPACE_FILES_BUCKET)
+    .upload(input.storagePath, new Blob([bytes], { type: input.sourceFile.mimeType }), {
+      contentType: input.sourceFile.mimeType,
+      upsert: false,
+    });
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return supabaseStore.addFile({
+    roomId: input.targetRoomId,
+    storagePath: input.storagePath,
+    originalName: input.sourceFile.originalName,
+    uploadedBy: input.userId,
+    sizeBytes: input.sourceFile.sizeBytes,
+    mimeType: input.sourceFile.mimeType,
+    checksum: input.sourceFile.checksum ?? null,
+  });
+}
+
+async function downloadStoredFileBytes(file: FileRecord) {
+  const admin = getSupabaseAdminClient();
+  if (!admin) {
+    throw new Error("Supabase service role is not configured.");
+  }
+  const { data, error } = await admin.storage.from(WORKSPACE_FILES_BUCKET).download(file.storagePath);
+  if (error) {
+    throw new Error(`파일 다운로드 실패(${file.originalName}): ${error.message}`);
+  }
+  return data.arrayBuffer();
+}
+
+function resolveLocalDownloadDir(value?: string | null) {
+  const raw = value?.trim() || defaultLocalDownloadDir();
+  const expanded = raw === "~" ? os.homedir() : raw.startsWith("~/") ? path.join(os.homedir(), raw.slice(2)) : raw;
+  const resolved = path.resolve(expanded);
+  if (!path.isAbsolute(resolved)) {
+    throw statusError("다운로드 폴더는 절대 경로로 지정해 주세요.", 400);
+  }
+  return resolved;
+}
+
+async function uniqueLocalFilePath(downloadDir: string, filename: string) {
+  const parsed = path.parse(filename);
+  for (let index = 0; index < 1000; index += 1) {
+    const suffix = index ? `-${index}` : "";
+    const candidate = path.join(downloadDir, `${parsed.name}${suffix}${parsed.ext}`);
+    try {
+      await stat(candidate);
+    } catch {
+      return candidate;
+    }
+  }
+  throw statusError("저장할 파일 이름을 만들지 못했습니다.", 500);
+}
+
+async function openLocalFile(filePath: string) {
+  if (process.platform === "darwin") {
+    await execFileAsync("open", [filePath]);
+    return;
+  }
+  if (process.platform === "win32") {
+    await execFileAsync("cmd", ["/c", "start", "", filePath]);
+    return;
+  }
+  await execFileAsync("xdg-open", [filePath]);
 }
 
 function anthropicFileMetadata(file: AnthropicFileMetadata) {

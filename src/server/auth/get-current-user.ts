@@ -68,7 +68,7 @@ async function getUserProfile({
   const normalizedEmail = email.trim().toLowerCase();
   const { data: allowedUser } = await (admin as unknown as LooseSupabase)
     .from("allowed_users")
-    .select("is_active")
+    .select("is_active,is_admin")
     .eq("email", normalizedEmail)
     .maybeSingle();
 
@@ -88,7 +88,7 @@ async function getUserProfile({
       email: normalizedEmail,
       displayName,
       avatarUrl,
-      isAdmin: false,
+      isAdmin: Boolean(allowedUser.is_admin),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -99,7 +99,7 @@ async function getUserProfile({
     email: String(data.email),
     displayName: String(data.display_name ?? data.email),
     avatarUrl: data.avatar_url ? String(data.avatar_url) : null,
-    isAdmin: Boolean(data.is_admin),
+    isAdmin: Boolean(data.is_admin) || Boolean(allowedUser.is_admin),
     createdAt: String(data.created_at),
     updatedAt: String(data.updated_at),
   };

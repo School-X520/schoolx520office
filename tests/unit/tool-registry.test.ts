@@ -7,7 +7,7 @@ describe("toolRegistry", () => {
     expect(toolRegistry.find((tool) => tool.name === "read_room_summary")?.writes).toBe(false);
   });
 
-  it("exports SchoolX tools as Claude Managed Agents custom tools", () => {
+  it("exports School-X tools as Claude Managed Agents custom tools", () => {
     const toolConfigs = getManagedAgentToolConfigs();
     expect(toolConfigs.find((tool) => tool.type === "agent_toolset_20260401")).toBeTruthy();
     expect(

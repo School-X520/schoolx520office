@@ -3,6 +3,8 @@ import "server-only";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
   Agent,
+  AgentPersona,
+  AgentPersonaVersion,
   AgentRun,
   AgentRunEvent,
   AllowedUser,
@@ -48,10 +50,13 @@ type CreateRoomThreadInput = Pick<RoomThread, "roomId" | "title"> &
   Partial<Omit<RoomThread, "id" | "roomId" | "title" | "createdAt" | "updatedAt">>;
 type CreateImportInput = Pick<MeetingImport, "targetRoomId"> & Partial<Omit<MeetingImport, "id" | "createdAt">>;
 type CreateDecisionInput = Pick<Decision, "roomId" | "title"> & Partial<Omit<Decision, "id" | "createdAt">>;
-type CreateTaskInput = Pick<Task, "roomId" | "title"> & Partial<Omit<Task, "id" | "createdAt" | "updatedAt">>;
+type CreateTaskInput = Pick<Task, "roomId" | "title"> &
+  Partial<Omit<Task, "id" | "roomId" | "title" | "createdAt" | "updatedAt">>;
 type CreateAuditInput = Pick<AuditLog, "action"> & Partial<Omit<AuditLog, "id" | "createdAt">>;
 type CreateMemoryReviewInput = Pick<MemoryWriteReview, "roomId" | "proposedMemory"> &
   Partial<Omit<MemoryWriteReview, "id" | "createdAt">>;
+type CreateAgentPersonaVersionInput = Pick<AgentPersonaVersion, "agentId" | "roomId" | "persona" | "versionNo"> &
+  Partial<Omit<AgentPersonaVersion, "id" | "createdAt">>;
 type CreateVideoMeetingInput = Pick<VideoMeeting, "roomId" | "provider" | "title"> &
   Partial<Omit<VideoMeeting, "id" | "createdAt" | "updatedAt">>;
 type CreateVideoArtifactInput = Pick<VideoMeetingArtifact, "videoMeetingId" | "artifactType" | "title"> &
@@ -81,6 +86,18 @@ function isThreadSchemaMissing(error: DbError | null) {
   return (
     error.message.includes("room_threads") ||
     error.message.includes("thread_id") ||
+    error.message.includes("schema cache")
+  );
+}
+
+function isAgentPersonaSchemaMissing(error: DbError | null) {
+  if (!error?.message) {
+    return false;
+  }
+  return (
+    error.message.includes("persona_draft") ||
+    error.message.includes("persona_published") ||
+    error.message.includes("agent_persona_versions") ||
     error.message.includes("schema cache")
   );
 }
@@ -136,6 +153,32 @@ function legacyThread(roomId: string): RoomThread {
   };
 }
 
+function defaultAgentPersona(input: { role: string; systemPrompt: string; guestPrompt: string; name: string }): AgentPersona {
+  const role = input.systemPrompt || input.role || `${input.name}로 담당 업무를 지원한다.`;
+  return {
+    role,
+    tone: "신중하고 간결한 한국어로 답한다.",
+    outputStyle: "먼저 결론을 짧게 말하고, 필요한 다음 행동을 bullet로 정리한다.",
+    priorities: `${input.role || input.name}의 업무 목표, 일정, 산출물 품질을 우선한다.`,
+    boundaries: "학생 개인정보, 계정, API 키, 내부 민감정보를 출력하지 않는다.",
+    customInstructions: "",
+    guestPrompt: input.guestPrompt || "회의방에서는 5문장 이내로 출처와 다음 행동을 포함해 브리핑한다.",
+  };
+}
+
+function agentPersonaFrom(value: unknown, fallback: AgentPersona): AgentPersona {
+  const source = jsonObject(value);
+  return {
+    role: text(source.role, fallback.role),
+    tone: text(source.tone, fallback.tone),
+    outputStyle: text(source.outputStyle, fallback.outputStyle),
+    priorities: text(source.priorities, fallback.priorities),
+    boundaries: text(source.boundaries, fallback.boundaries),
+    customInstructions: text(source.customInstructions, fallback.customInstructions),
+    guestPrompt: text(source.guestPrompt, fallback.guestPrompt),
+  };
+}
+
 function roomFrom(rowValue: Record<string, unknown>): Room {
   return {
     id: text(rowValue.id),
@@ -185,18 +228,32 @@ function userProfileFrom(rowValue: Record<string, unknown>): UserProfile {
 }
 
 function agentFrom(rowValue: Record<string, unknown>): Agent {
+  const metadata = jsonObject(rowValue.metadata);
+  const base = {
+    name: text(rowValue.name),
+    role: text(rowValue.role),
+    systemPrompt: text(rowValue.system_prompt),
+    guestPrompt: text(rowValue.guest_prompt),
+  };
+  const fallbackPersona = defaultAgentPersona(base);
   return {
     id: text(rowValue.id),
     roomId: text(rowValue.room_id),
-    name: text(rowValue.name),
-    role: text(rowValue.role),
+    name: base.name,
+    role: base.role,
     anthropicAgentId: nullableText(rowValue.anthropic_agent_id),
     anthropicEnvironmentId: nullableText(rowValue.anthropic_environment_id),
     defaultModel: text(rowValue.default_model, "claude-sonnet-4-5"),
-    systemPrompt: text(rowValue.system_prompt),
-    guestPrompt: text(rowValue.guest_prompt),
+    systemPrompt: base.systemPrompt,
+    guestPrompt: base.guestPrompt,
+    personaDraft: agentPersonaFrom(rowValue.persona_draft ?? metadata.persona_draft, fallbackPersona),
+    personaPublished: agentPersonaFrom(rowValue.persona_published ?? metadata.persona_published, fallbackPersona),
+    personaDraftUpdatedBy: nullableText(rowValue.persona_draft_updated_by) ?? nullableText(metadata.persona_draft_updated_by),
+    personaDraftUpdatedAt: nullableText(rowValue.persona_draft_updated_at) ?? nullableText(metadata.persona_draft_updated_at),
+    personaPublishedBy: nullableText(rowValue.persona_published_by) ?? nullableText(metadata.persona_published_by),
+    personaPublishedAt: nullableText(rowValue.persona_published_at) ?? nullableText(metadata.persona_published_at),
     isActive: bool(rowValue.is_active, true),
-    metadata: jsonObject(rowValue.metadata),
+    metadata,
     createdAt: text(rowValue.created_at),
     updatedAt: text(rowValue.updated_at),
   };
@@ -286,17 +343,20 @@ function agentRunFrom(rowValue: Record<string, unknown>): AgentRun {
 }
 
 function sharedItemFrom(rowValue: Record<string, unknown>): SharedItem {
+  const metadata = jsonObject(rowValue.metadata);
   return {
     id: text(rowValue.id),
     sourceRoomId: text(rowValue.source_room_id),
+    sourceRoomName: nullableText(metadata.sourceRoomName),
     targetRoomId: text(rowValue.target_room_id, "meeting"),
+    targetRoomName: nullableText(metadata.targetRoomName),
     sourceMessageId: nullableText(rowValue.source_message_id),
     sourceFileId: nullableText(rowValue.source_file_id),
     title: text(rowValue.title),
     summary: text(rowValue.summary),
     sharedBy: nullableText(rowValue.shared_by),
     createdAt: text(rowValue.created_at),
-    metadata: jsonObject(rowValue.metadata),
+    metadata,
   };
 }
 
@@ -356,7 +416,12 @@ function taskFrom(rowValue: Record<string, unknown>): Task {
     createdBy: nullableText(rowValue.created_by),
     createdAt: text(rowValue.created_at),
     updatedAt: text(rowValue.updated_at),
+    metadata: jsonObject(rowValue.metadata),
   };
+}
+
+function isTaskVisibleInRoom(task: Task, roomId: string) {
+  return task.roomId === roomId || task.assigneeRoomId === roomId;
 }
 
 function auditFrom(rowValue: Record<string, unknown>): AuditLog {
@@ -383,6 +448,27 @@ function memoryReviewFrom(rowValue: Record<string, unknown>): MemoryWriteReview 
     reviewedBy: nullableText(rowValue.reviewed_by),
     reviewedAt: nullableText(rowValue.reviewed_at),
     createdAt: text(rowValue.created_at),
+  };
+}
+
+function agentPersonaVersionFrom(rowValue: Record<string, unknown>): AgentPersonaVersion {
+  const persona = agentPersonaFrom(rowValue.persona, defaultAgentPersona({
+    name: "업무 봇",
+    role: "업무방 도메인 봇",
+    systemPrompt: "",
+    guestPrompt: "",
+  }));
+  return {
+    id: text(rowValue.id),
+    agentId: text(rowValue.agent_id),
+    roomId: text(rowValue.room_id),
+    versionNo: numberValue(rowValue.version_no, 1),
+    persona,
+    anthropicAgentId: nullableText(rowValue.anthropic_agent_id),
+    anthropicAgentVersion: typeof rowValue.anthropic_agent_version === "number" ? rowValue.anthropic_agent_version : null,
+    publishedBy: nullableText(rowValue.published_by),
+    createdAt: text(rowValue.created_at),
+    metadata: jsonObject(rowValue.metadata),
   };
 }
 
@@ -512,6 +598,37 @@ export const supabaseStore = {
     return result ? userProfileFrom(result) : null;
   },
 
+  async updateAllowedUser(
+    email: string,
+    patch: {
+      isActive?: boolean;
+      isAdmin?: boolean;
+      notes?: string | null;
+    },
+  ) {
+    const updates: Record<string, unknown> = {};
+    if (typeof patch.isActive === "boolean") {
+      updates.is_active = patch.isActive;
+    }
+    if (typeof patch.isAdmin === "boolean") {
+      updates.is_admin = patch.isAdmin;
+    }
+    if ("notes" in patch) {
+      updates.notes = patch.notes ?? null;
+    }
+    if (!Object.keys(updates).length) {
+      return this.getAllowedUser(email);
+    }
+    const { data, error } = await db()
+      .from("allowed_users")
+      .update(updates)
+      .eq("email", email.toLowerCase())
+      .select("*")
+      .maybeSingle();
+    const result = row(assertOk(data, error));
+    return result ? allowedUserFrom(result) : null;
+  },
+
   async upsertAllowedUser(input: {
     email: string;
     invitedBy?: string | null;
@@ -607,6 +724,90 @@ export const supabaseStore = {
       .maybeSingle();
     const result = row(assertOk(data, error));
     return result ? agentFrom(result) : null;
+  },
+
+  async updateAgentPersona(
+    agentId: string,
+    input: {
+      personaDraft?: AgentPersona;
+      personaPublished?: AgentPersona;
+      updatedBy?: string | null;
+      publishedBy?: string | null;
+      metadata?: Record<string, unknown>;
+      anthropicAgentVersion?: number | null;
+    },
+  ) {
+    const current = await this.getAgent(agentId);
+    if (!current) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const nextMetadata = {
+      ...current.metadata,
+      ...(input.metadata ?? {}),
+      persona_draft: input.personaDraft ?? current.personaDraft,
+      persona_published: input.personaPublished ?? current.personaPublished,
+      persona_draft_updated_by: input.updatedBy ?? current.personaDraftUpdatedBy ?? null,
+      persona_draft_updated_at: input.personaDraft ? now : current.personaDraftUpdatedAt ?? null,
+      persona_published_by: input.publishedBy ?? current.personaPublishedBy ?? null,
+      persona_published_at: input.personaPublished ? now : current.personaPublishedAt ?? null,
+      anthropic_agent_version: input.anthropicAgentVersion ?? current.metadata.anthropic_agent_version ?? null,
+    };
+    const published = input.personaPublished ?? current.personaPublished;
+    const result = await db()
+      .from("agents")
+      .update({
+        persona_draft: input.personaDraft,
+        persona_published: input.personaPublished,
+        persona_draft_updated_by: input.personaDraft ? input.updatedBy ?? null : undefined,
+        persona_draft_updated_at: input.personaDraft ? now : undefined,
+        persona_published_by: input.personaPublished ? input.publishedBy ?? null : undefined,
+        persona_published_at: input.personaPublished ? now : undefined,
+        system_prompt: published?.role,
+        guest_prompt: published?.guestPrompt,
+        metadata: nextMetadata,
+      })
+      .eq("id", agentId)
+      .select("*")
+      .single();
+
+    if (isAgentPersonaSchemaMissing(result.error)) {
+      const fallback = await db()
+        .from("agents")
+        .update({
+          system_prompt: published?.role,
+          guest_prompt: published?.guestPrompt,
+          metadata: nextMetadata,
+        })
+        .eq("id", agentId)
+        .select("*")
+        .single();
+      return agentFrom(row(assertOk(fallback.data, fallback.error))!);
+    }
+
+    return agentFrom(row(assertOk(result.data, result.error))!);
+  },
+
+  async addAgentPersonaVersion(input: CreateAgentPersonaVersionInput) {
+    const { data, error } = await db()
+      .from("agent_persona_versions")
+      .insert({
+        agent_id: input.agentId,
+        room_id: input.roomId,
+        version_no: input.versionNo,
+        persona: input.persona,
+        anthropic_agent_id: input.anthropicAgentId ?? null,
+        anthropic_agent_version: input.anthropicAgentVersion ?? null,
+        published_by: input.publishedBy ?? null,
+        metadata: input.metadata ?? {},
+      })
+      .select("*")
+      .single();
+    if (isAgentPersonaSchemaMissing(error)) {
+      return null;
+    }
+    return agentPersonaVersionFrom(row(assertOk(data, error))!);
   },
 
   async listMemberships(userId?: string) {
@@ -982,6 +1183,23 @@ export const supabaseStore = {
     return importFrom(row(assertOk(data, error))!);
   },
 
+  async updateImport(importId: string, patch: Partial<MeetingImport>) {
+    const update: Record<string, unknown> = {};
+    if (patch.status) {
+      update.status = patch.status;
+    }
+    if (patch.metadata) {
+      update.metadata = patch.metadata;
+    }
+    const { data, error } = await db()
+      .from("meeting_imports")
+      .update(update)
+      .eq("id", importId)
+      .select("*")
+      .single();
+    return importFrom(row(assertOk(data, error))!);
+  },
+
   async listFiles(roomId: string) {
     const { data, error } = await db()
       .from("file_room_access")
@@ -1098,13 +1316,33 @@ export const supabaseStore = {
     return decisionFrom(row(assertOk(data, error))!);
   },
 
-  async listTasks(roomId?: string) {
-    let query = db().from("tasks").select("*").order("created_at", { ascending: false });
-    if (roomId) {
-      query = query.or(`room_id.eq.${roomId},assignee_room_id.eq.${roomId}`);
+  async updateDecision(decisionId: string, patch: Partial<Decision>) {
+    const update: Record<string, unknown> = {};
+    if (patch.title !== undefined) {
+      update.title = patch.title;
     }
-    const { data, error } = await query;
-    return rows(assertOk(data, error)).map(taskFrom);
+    if (patch.description !== undefined) {
+      update.description = patch.description;
+    }
+    const { data, error } = await db()
+      .from("decisions")
+      .update(update)
+      .eq("id", decisionId)
+      .select("*")
+      .single();
+    return decisionFrom(row(assertOk(data, error))!);
+  },
+
+  async deleteDecision(decisionId: string) {
+    const { data, error } = await db().from("decisions").delete().eq("id", decisionId).select("*");
+    assertOk(data, error);
+    return rows(data).length > 0;
+  },
+
+  async listTasks(roomId?: string) {
+    const { data, error } = await db().from("tasks").select("*").order("created_at", { ascending: false });
+    const tasks = rows(assertOk(data, error)).map(taskFrom);
+    return roomId ? tasks.filter((task) => isTaskVisibleInRoom(task, roomId)) : tasks;
   },
 
   async createTask(input: CreateTaskInput) {

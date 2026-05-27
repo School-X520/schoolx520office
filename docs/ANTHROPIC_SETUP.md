@@ -1,6 +1,6 @@
 # Claude Managed Agents Setup
 
-이 문서는 SchoolX에 Claude Managed Agents를 연결하는 운영 순서다. 메인 회의방에는 상주 봇을 만들지 않는다. 9개 업무방에만 상주 봇을 만들고, 메인 회의방에서는 업무방 봇을 게스트로 호출한다.
+이 문서는 School-X 교사연구회 AI Office에 Claude Managed Agents를 연결하는 운영 순서다. 메인 회의방에는 상주 봇을 만들지 않는다. 현재 활성화된 8개 업무방에만 상주 봇을 만들고, 메인 회의방에서는 업무방 봇을 게스트로 호출한다.
 
 ## 1. Anthropic 준비
 
@@ -140,6 +140,6 @@ pnpm dlx vercel@latest deploy --prod --yes
 
 - Managed Agent session ID는 앱의 `agent_runs.anthropic_session_id`에 저장된다.
 - 이벤트는 `agent_run_events`에 저장된다.
-- SchoolX 앱은 Supabase DB를 직접 agent에게 열지 않는다.
+- School-X 교사연구회 AI Office는 Supabase DB를 직접 agent에게 열지 않는다.
 - 현재 구현은 안전한 1차 연결로, Claude에게 앱 컨텍스트를 전달해 답변하게 한다.
 - DB write 도구 연동은 다음 단계에서 `agent.custom_tool_use`를 받아 백엔드 wrapper로 실행하는 방식으로 확장한다.

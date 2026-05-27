@@ -1,7 +1,8 @@
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { shouldUseMockData } from "@/lib/env";
-import { AuthError } from "@/server/auth/errors";
+import { AuthError, ForbiddenError } from "@/server/auth/errors";
 import { requireAdmin } from "@/server/auth/require-user";
 import { redirectToLogin } from "@/server/auth/redirect-to-login";
 import { getOfficeView } from "@/server/rooms/get-room-view";
@@ -16,6 +17,9 @@ export default async function AdminPage() {
     if (error instanceof AuthError) {
       return redirectToLogin("/admin");
     }
+    if (error instanceof ForbiddenError) {
+      redirect("/office");
+    }
     throw error;
   });
   const view = await getOfficeView(user.userId);
@@ -24,6 +28,7 @@ export default async function AdminPage() {
     <AppShell user={user} rooms={view.rooms} memberships={view.memberships}>
       <AdminDashboard
         allowedUsers={await source.listAllowedUsers()}
+        currentUserEmail={user.email}
         memberships={await source.listMemberships()}
         profiles={await source.listUserProfiles()}
         rooms={await source.listRooms()}

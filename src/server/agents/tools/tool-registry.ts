@@ -13,7 +13,7 @@ export const toolRegistry: ToolDefinition[] = [
   {
     name: "read_room_summary",
     description:
-      "Read the current SchoolX room memory summary, decisions, active tasks, key facts, and pending context. Use this before answering questions that require room history or standing project context.",
+      "Read the current School-X room memory summary, decisions, active tasks, key facts, and pending context. Use this before answering questions that require room history or standing project context.",
     risk: "low",
     writes: false,
     inputSchema: objectSchema({
@@ -38,7 +38,7 @@ export const toolRegistry: ToolDefinition[] = [
   {
     name: "search_room_messages",
     description:
-      "Search recent messages in an authorized SchoolX room. Use this when you need exact prior discussion, decisions, or bot/human messages instead of relying only on the startup context.",
+      "Search recent messages in an authorized School-X room. Use this when you need exact prior discussion, decisions, or bot/human messages instead of relying only on the startup context.",
     risk: "medium",
     writes: false,
     inputSchema: objectSchema({
@@ -50,7 +50,7 @@ export const toolRegistry: ToolDefinition[] = [
   {
     name: "list_room_files",
     description:
-      "List files available to an authorized SchoolX room, including file IDs and session mountPath values. If a file is mounted in the current session, read it directly from mountPath before answering document/PDF questions.",
+      "List files available to an authorized School-X room, including file IDs and session mountPath values. If a file is mounted in the current session, read it directly from mountPath before answering document/PDF questions.",
     risk: "medium",
     writes: false,
     inputSchema: objectSchema({
@@ -61,7 +61,7 @@ export const toolRegistry: ToolDefinition[] = [
   {
     name: "read_room_file",
     description:
-      "Read and extract text from an authorized SchoolX room file via the backend. Use this whenever mountPath is missing/unreadable or before answering questions about uploaded PDFs, text files, CSV, JSON, or markdown. Prefer file_id from list_room_files.",
+      "Read and extract text from an authorized School-X room file via the backend. Use this whenever mountPath is missing/unreadable or before answering questions about uploaded PDFs, text files, CSV, JSON, or markdown. Prefer file_id from list_room_files.",
     risk: "medium",
     writes: false,
     inputSchema: objectSchema({
@@ -74,7 +74,7 @@ export const toolRegistry: ToolDefinition[] = [
   {
     name: "create_decision",
     description:
-      "Record a concrete decision in a SchoolX room so it appears in the Decisions panel. Use when the user says something has been decided, asks to record a decision, or the meeting reaches an explicit conclusion.",
+      "Record a concrete decision in a School-X room so it appears in the Decisions panel. Use when the user says something has been decided, asks to record a decision, or the meeting reaches an explicit conclusion.",
     risk: "medium",
     writes: true,
     inputSchema: objectSchema(
@@ -124,7 +124,7 @@ export const toolRegistry: ToolDefinition[] = [
   {
     name: "create_task_from_decision",
     description:
-      "Create a SchoolX task from a decision or actionable next step. Use when a conversation has a concrete owner, follow-up, due date, or work item.",
+      "Create a School-X task from a decision or actionable next step. Use when a conversation has a concrete owner, follow-up, due date, or work item.",
     risk: "medium",
     writes: true,
     inputSchema: objectSchema(

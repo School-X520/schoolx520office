@@ -7,6 +7,7 @@ import { requireRoomMember } from "@/server/auth/require-room-member";
 import { shareMessageToMeeting, importMeetingMessageToRoom } from "@/server/collaboration/share-import-service";
 import { toolRegistry } from "@/server/agents/tools/tool-registry";
 import { agentFileMountPath, readRoomFileForAgent } from "@/server/files/file-service";
+import { isDevelopmentAgent } from "@/lib/agents/development-agent";
 import type { AgentRun, RoomMessage } from "@/types/domain";
 
 export async function executeTool(agentRunId: string, toolName: string, input: Record<string, unknown>) {
@@ -188,13 +189,16 @@ function requireInitiator(run: AgentRun) {
 
 async function resolveReadableRoom(run: AgentRun, userId: string, rawRoomId: unknown) {
   const roomId = normalizeRoomId(rawRoomId) || defaultToolRoom(run);
-  ensureRoomInAgentScope(run, roomId);
+  await ensureRoomReadableInAgentScope(run, roomId);
   await requireRoomMember(userId, roomId);
   return roomId;
 }
 
 async function resolveWritableRoom(run: AgentRun, userId: string, rawRoomId: unknown) {
-  return resolveReadableRoom(run, userId, rawRoomId);
+  const roomId = normalizeRoomId(rawRoomId) || defaultToolRoom(run);
+  ensureRoomInAgentScope(run, roomId);
+  await requireRoomMember(userId, roomId);
+  return roomId;
 }
 
 function defaultToolRoom(run: AgentRun) {
@@ -209,6 +213,15 @@ function ensureRoomInAgentScope(run: AgentRun, roomId: string) {
   if (!allowed.has(roomId)) {
     throw new Error(`tool_room_out_of_scope:${roomId}`);
   }
+}
+
+async function ensureRoomReadableInAgentScope(run: AgentRun, roomId: string) {
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const agent = run.agentId ? await source.getAgent(run.agentId) : null;
+  if (isDevelopmentAgent(agent)) {
+    return;
+  }
+  ensureRoomInAgentScope(run, roomId);
 }
 
 function normalizeRoomId(value: unknown) {

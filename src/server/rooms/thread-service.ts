@@ -43,7 +43,7 @@ export async function createRoomThread(userId: string, roomId: string, title?: s
     source.getRoom(roomId),
     source.listThreads(roomId),
     source.getMemory(roomId),
-    source.listDecisions(roomId),
+    source.listDecisions("meeting"),
     source.listTasks(roomId),
   ]);
   if (!room) {

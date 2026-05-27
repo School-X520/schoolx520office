@@ -16,7 +16,7 @@ import type { RoomViewModel, UserProfile } from "@/types/domain";
 export function RoomWorkspace({ view, user }: { view: RoomViewModel; user: UserProfile }) {
   const isMeeting = view.room.id === "meeting";
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="min-w-0 space-y-4">
         <div className="rounded-lg border border-line bg-card p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -76,12 +76,15 @@ export function RoomWorkspace({ view, user }: { view: RoomViewModel; user: UserP
       </section>
       <RoomRightPanel
         roomId={view.room.id}
+        agent={view.agent}
+        canEditAgentPersona={view.membership?.role === "admin"}
         memory={view.memory}
         files={view.files}
         sharedItems={view.sharedItems}
         imports={view.imports}
         decisions={view.decisions}
         tasks={view.tasks}
+        taskTargetRooms={view.taskTargetRooms}
       />
     </div>
   );

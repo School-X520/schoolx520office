@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "교과연구회 AI Office",
-  description: "교사 교과 연구회용 AI 협업 사무실",
+  title: "School-X 교사연구회 AI Office",
+  description: "School-X 교사연구회용 AI 협업 사무실",
 };
 
 export default function RootLayout({

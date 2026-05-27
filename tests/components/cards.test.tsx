@@ -27,6 +27,7 @@ describe("cards", () => {
     const shared: SharedItem = {
       id: "s",
       sourceRoomId: "finance",
+      sourceRoomName: "재무",
       targetRoomId: "meeting",
       title: "공유",
       summary: "요약",
@@ -55,6 +56,7 @@ describe("cards", () => {
       </>,
     );
     expect(screen.getByText("공유")).toBeInTheDocument();
+    expect(screen.getByText("재무방에서 공유됨")).toBeInTheDocument();
     expect(screen.getByText("research 반입 항목")).toBeInTheDocument();
   });
 });

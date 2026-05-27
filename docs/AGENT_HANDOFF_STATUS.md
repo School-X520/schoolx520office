@@ -2,13 +2,13 @@
 
 Last updated: 2026-05-10 KST
 
-This document summarizes the current implementation state of `SchoolX` so another AI agent can continue the project without re-discovering the setup. Do not paste secrets into this file. Runtime secrets live only in ignored local or deployment environment variables.
+This document summarizes the current implementation state of `School-X 교사연구회 AI Office` so another AI agent can continue the project without re-discovering the setup. Do not paste secrets into this file. Runtime secrets live only in ignored local or deployment environment variables.
 
 ## Project Summary
 
-`SchoolX` is a Next.js App Router application for a teacher subject-research-group AI office.
+`School-X 교사연구회 AI Office` is a Next.js App Router application for a teacher research-group AI office.
 
-The office has 10 persistent rooms:
+The office has 9 active rooms and 1 inactive placeholder room:
 
 - `meeting`: 메인 회의방, no resident bot
 - `finance`: 재무
@@ -17,11 +17,11 @@ The office has 10 persistent rooms:
 - `development`: 개발
 - `research`: 연구
 - `promotion`: 홍보
-- `city_research`: 시교육연구회 과제
-- `province_research`: 도교육연구회 과제
-- `science_museum`: 과학관 과제
+- `province_research`: 경기도교육연구회
+- `science_museum`: 과학관 AI교육 연구회
+- `city_research`: 비활성 프로젝트방, hidden until it is renamed and reused
 
-Each non-meeting room has one domain bot. The meeting room calls room bots as guests when needed. Agent runtime sessions are tracked in `agent_runs` and `agent_run_events`; do not introduce a `sessions` table.
+Each active non-meeting room has one domain bot. The meeting room calls room bots as guests when needed. Agent runtime sessions are tracked in `agent_runs` and `agent_run_events`; do not introduce a `sessions` table.
 
 ## Repository State
 
@@ -354,4 +354,3 @@ Recommended next steps, in order:
 - Use `apply_patch` for code edits.
 - Run at least `pnpm lint`, `pnpm typecheck`, and relevant tests after changes.
 - If committing, keep using the existing `main` branch unless the user asks for a branch.
-

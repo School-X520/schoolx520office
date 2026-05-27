@@ -1,5 +1,6 @@
 import { Shield, UserPlus, Users } from "lucide-react";
 import { AllowedUserForm } from "@/components/admin/AllowedUserForm";
+import { AllowedUsersManager } from "@/components/admin/AllowedUsersManager";
 import { MembershipManager } from "@/components/admin/MembershipManager";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { StatusPill } from "@/components/layout/StatusPill";
@@ -7,11 +8,13 @@ import type { AllowedUser, RoomMembership, Room, UserProfile } from "@/types/dom
 
 export function AdminDashboard({
   allowedUsers,
+  currentUserEmail,
   memberships,
   profiles,
   rooms,
 }: {
   allowedUsers: AllowedUser[];
+  currentUserEmail: string;
   memberships: RoomMembership[];
   profiles: UserProfile[];
   rooms: Room[];
@@ -31,26 +34,7 @@ export function AdminDashboard({
             </p>
             <StatusPill tone="gold">{allowedUsers.length}</StatusPill>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs text-ink-soft">
-                <tr>
-                  <th className="py-2">email</th>
-                  <th className="py-2">active</th>
-                  <th className="py-2">admin</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allowedUsers.map((user) => (
-                  <tr key={user.email} className="border-t border-line">
-                    <td className="py-2">{user.email}</td>
-                    <td className="py-2">{String(user.isActive)}</td>
-                    <td className="py-2">{String(Boolean(user.isAdmin))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <AllowedUsersManager allowedUsers={allowedUsers} currentUserEmail={currentUserEmail} />
         </WarmCard>
         <WarmCard>
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold">
@@ -69,17 +53,6 @@ export function AdminDashboard({
           <StatusPill tone="neutral">{profiles.length} profiles</StatusPill>
         </div>
         <MembershipManager rooms={rooms} memberships={memberships} profiles={profiles} />
-        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {rooms.map((room) => {
-            const count = memberships.filter((item) => item.roomId === room.id).length;
-            return (
-              <div key={room.id} className="rounded-md border border-line bg-white/35 p-3">
-                <p className="font-medium">{room.icon} {room.name}</p>
-                <p className="text-sm text-ink-soft tabular-nums">{count}명</p>
-              </div>
-            );
-          })}
-        </div>
       </WarmCard>
     </div>
   );

@@ -8,6 +8,7 @@ import { redirectToLogin } from "@/server/auth/redirect-to-login";
 import { getOfficeView } from "@/server/rooms/get-room-view";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
+import { getOperationStatus } from "@/server/office/operation-status-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -20,10 +21,11 @@ export default async function OfficePage() {
     throw error;
   });
   const source = shouldUseMockData() ? mockStore : supabaseStore;
-  const [view, videoMeetings, sharedItems] = await Promise.all([
+  const [view, videoMeetings, sharedItems, operationStatus] = await Promise.all([
     getOfficeView(user.userId),
     source.listVideoMeetings("meeting"),
     source.listSharedItems("meeting"),
+    getOperationStatus(user.userId),
   ]);
   const activeMeeting = videoMeetings.find((meeting) => meeting.status !== "ended") ?? null;
 
@@ -34,7 +36,7 @@ export default async function OfficePage() {
       memberships={view.memberships}
       showSidebar={false}
       fitViewport
-      right={<MeetingSidePanel sharedItems={sharedItems} activeMeeting={activeMeeting} />}
+      right={<MeetingSidePanel sharedItems={sharedItems} activeMeeting={activeMeeting} operationStatus={operationStatus} />}
     >
       <OfficeFloorPlan rooms={view.rooms} agents={view.agents} memberships={view.memberships} />
     </AppShell>
