@@ -21,6 +21,7 @@ export type AgentStreamEvent = {
 export type AgentRunInput = {
   agentRunId: string;
   roomId: string;
+  threadId: string;
   agentId: string;
   userId: string;
   message: string;

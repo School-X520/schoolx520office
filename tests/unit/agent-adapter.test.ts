@@ -7,6 +7,7 @@ describe("MockAgentAdapter", () => {
     const result = await adapter.run({
       agentRunId: "00000000-0000-4000-8000-000000000001",
       roomId: "finance",
+      threadId: "finance-thread-default",
       agentId: "finance_bot",
       userId: "user",
       message: "예산 확인",

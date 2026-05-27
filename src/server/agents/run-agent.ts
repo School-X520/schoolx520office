@@ -5,15 +5,17 @@ import { AnthropicApiError } from "@/lib/anthropic/managed-agents-api";
 import { getAgentAdapter } from "@/server/agents/get-agent-adapter";
 import { finalizeAgentRun } from "@/server/agents/finalize-agent-run";
 import { createRoomMessage } from "@/server/messages/room-message-service";
-import { getAgentStartupContext } from "@/server/memory/domain-memory-service";
+import { getAgentMemoryAttachments, getAgentStartupContext } from "@/server/memory/domain-memory-service";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { requireRoomMember } from "@/server/auth/require-room-member";
+import { resolveRoomThread } from "@/server/rooms/thread-service";
 import type { AgentRun, AgentRunMode, AgentRunType, RoomMessage } from "@/types/domain";
 
 type RunAgentInput = {
   userId: string;
   roomId: string;
+  threadId?: string | null;
   agentId?: string;
   message: string;
   inputMessageId?: string | null;
@@ -26,6 +28,7 @@ type AgentRunJob = {
   runId: string;
   userId: string;
   roomId: string;
+  threadId: string;
   agentId: string;
   message: string;
   mode: AgentRunMode;
@@ -66,17 +69,24 @@ export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentR
     throw new Error("이 방의 상주 봇만 호출할 수 있습니다.");
   }
 
-  const inputMessage = input.inputMessageId
+  const existingInputMessage = input.inputMessageId
     ? await getExistingInputMessage(input.roomId, input.inputMessageId)
+    : null;
+  const thread = await resolveRoomThread(input.userId, input.roomId, existingInputMessage?.threadId ?? input.threadId);
+
+  const inputMessage = existingInputMessage
+    ? existingInputMessage
     : await createRoomMessage({
         userId: input.userId,
         roomId: input.roomId,
+        threadId: thread.id,
         content: input.message,
         type: "human",
       });
 
   const run = await source.createAgentRun({
     roomId: input.roomId,
+    threadId: thread.id,
     agentId: agent.id,
     initiatedBy: input.userId,
     mode,
@@ -93,6 +103,7 @@ export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentR
       runId: run.id,
       userId: input.userId,
       roomId: input.roomId,
+      threadId: thread.id,
       agentId: agent.id,
       message: input.message,
       mode,
@@ -120,15 +131,18 @@ export async function completeAgentRun(job: AgentRunJob) {
   try {
     const adapter = getAgentAdapter();
     const startupContext = await getRunStartupContext(job);
+    const memoryAttachments = await getRunMemoryAttachments(job);
     const result = await adapter.run({
       agentRunId: job.runId,
       roomId: job.roomId,
+      threadId: job.threadId,
       agentId: job.agentId,
       userId: job.userId,
       message: job.message,
       mode: job.mode,
       guestSourceRoomId: job.guestSourceRoomId,
       startupContext,
+      memoryAttachments,
     });
 
     for (const event of result.events ?? []) {
@@ -137,6 +151,7 @@ export async function completeAgentRun(job: AgentRunJob) {
 
     const outputMessage = await source.createMessage({
       roomId: job.roomId,
+      threadId: job.threadId,
       type: job.mode === "meeting_guest" ? "guest_agent" : "agent",
       content: result.content,
       senderUserId: null,
@@ -209,12 +224,12 @@ async function getExistingInputMessage(roomId: string, inputMessageId: string) {
 
 async function getRunStartupContext(job: AgentRunJob) {
   if (job.mode !== "meeting_guest" || !job.guestSourceRoomId) {
-    return getAgentStartupContext(job.roomId, job.mode, { messageLimit: 40 });
+    return getAgentStartupContext(job.roomId, job.mode, { threadId: job.threadId, messageLimit: 18 });
   }
 
   const [meetingContext, sourceRoomContext] = await Promise.all([
-    getAgentStartupContext(job.roomId, job.mode, { messageLimit: 80 }),
-    getAgentStartupContext(job.guestSourceRoomId, "room", { messageLimit: 30 }),
+    getAgentStartupContext(job.roomId, job.mode, { threadId: job.threadId, messageLimit: 24 }),
+    getAgentStartupContext(job.guestSourceRoomId, "room", { messageLimit: 0 }),
   ]);
 
   return {
@@ -224,6 +239,18 @@ async function getRunStartupContext(job: AgentRunJob) {
     meetingRoom: meetingContext,
     sourceRoom: sourceRoomContext,
   };
+}
+
+async function getRunMemoryAttachments(job: AgentRunJob) {
+  if (job.mode === "meeting_guest" && job.guestSourceRoomId) {
+    const [meeting, sourceRoom] = await Promise.all([
+      getAgentMemoryAttachments(job.roomId, "read_only"),
+      getAgentMemoryAttachments(job.guestSourceRoomId, "read_only"),
+    ]);
+    return [...meeting, ...sourceRoom];
+  }
+
+  return getAgentMemoryAttachments(job.roomId, "read_only");
 }
 
 function agentRunErrorMessage(error: unknown) {

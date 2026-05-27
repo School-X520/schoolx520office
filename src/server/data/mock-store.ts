@@ -17,7 +17,9 @@ import type {
   FileRecord,
   MeetingImport,
   MemoryWriteReview,
+  RoomMemoryStore,
   RoomMessage,
+  RoomThread,
   SharedItem,
   Task,
   UserProfile,
@@ -27,6 +29,7 @@ import type {
 } from "@/types/domain";
 
 type MockState = {
+  threads: RoomThread[];
   messages: RoomMessage[];
   agentRuns: AgentRun[];
   agentRunEvents: AgentRunEvent[];
@@ -38,6 +41,7 @@ type MockState = {
   tasks: Task[];
   auditLogs: AuditLog[];
   memoryReviews: MemoryWriteReview[];
+  memoryStores: RoomMemoryStore[];
   videoMeetings: VideoMeeting[];
   videoArtifacts: VideoMeetingArtifact[];
   videoEvents: VideoMeetingEvent[];
@@ -53,11 +57,29 @@ function now() {
   return new Date().toISOString();
 }
 
-function initialMessages(): RoomMessage[] {
+function initialThreads(): RoomThread[] {
+  return seedRooms.map((room) => ({
+    id: `${room.id}-thread-default`,
+    roomId: room.id,
+    title: `${room.name} 기본 대화`,
+    summary: `${room.name} 방의 기본 대화입니다.`,
+    carryoverSummary: "",
+    status: "active",
+    lastMessageAt: now(),
+    createdBy: mockUser.userId,
+    createdAt: now(),
+    updatedAt: now(),
+    metadata: { kind: "default" },
+  }));
+}
+
+function initialMessages(threads: RoomThread[]): RoomMessage[] {
+  const threadId = (roomId: string) => threads.find((thread) => thread.roomId === roomId)?.id ?? `${roomId}-thread-default`;
   return [
     {
       id: id(),
       roomId: "meeting",
+      threadId: threadId("meeting"),
       senderUserId: null,
       senderAgentId: null,
       agentRunId: null,
@@ -69,6 +91,7 @@ function initialMessages(): RoomMessage[] {
     {
       id: id(),
       roomId: "finance",
+      threadId: threadId("finance"),
       senderUserId: mockUser.userId,
       senderAgentId: null,
       agentRunId: null,
@@ -81,8 +104,10 @@ function initialMessages(): RoomMessage[] {
 }
 
 function initialState(): MockState {
+  const threads = initialThreads();
   return {
-    messages: initialMessages(),
+    threads,
+    messages: initialMessages(threads),
     agentRuns: [],
     agentRunEvents: [],
     memories: structuredClone(baseMemories),
@@ -131,6 +156,15 @@ function initialState(): MockState {
     ],
     auditLogs: [],
     memoryReviews: [],
+    memoryStores: seedRooms.map((room) => ({
+      id: `${room.id}-memory-store-link`,
+      roomId: room.id,
+      anthropicMemoryStoreId: null,
+      accessMode: "read_write",
+      purpose: `${room.name} Claude Memory Store placeholder`,
+      createdAt: now(),
+      updatedAt: now(),
+    })),
     videoMeetings: [],
     videoArtifacts: [],
     videoEvents: [],
@@ -187,15 +221,70 @@ export const mockStore = {
     return seedMemberships.find((membership) => membership.userId === userId && membership.roomId === roomId) ?? null;
   },
 
-  listMessages(roomId: string) {
+  listThreads(roomId: string) {
     return state()
-      .messages.filter((message) => message.roomId === roomId)
+      .threads.filter((thread) => thread.roomId === roomId)
+      .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
+  },
+
+  getThread(threadId: string) {
+    return state().threads.find((thread) => thread.id === threadId) ?? null;
+  },
+
+  ensureRoomThread(roomId: string, input: Partial<RoomThread> = {}) {
+    const existing = this.listThreads(roomId).find((thread) => thread.status === "active") ?? this.listThreads(roomId)[0];
+    if (existing) {
+      return existing;
+    }
+    return this.createThread({
+      roomId,
+      title: input.title ?? "기본 대화",
+      summary: input.summary ?? "",
+      carryoverSummary: input.carryoverSummary ?? "",
+      status: input.status ?? "active",
+      createdBy: input.createdBy ?? mockUser.userId,
+      metadata: input.metadata ?? {},
+    });
+  },
+
+  createThread(input: Pick<RoomThread, "roomId" | "title"> & Partial<RoomThread>) {
+    const thread: RoomThread = {
+      id: id(),
+      roomId: input.roomId,
+      title: input.title,
+      summary: input.summary ?? "",
+      carryoverSummary: input.carryoverSummary ?? "",
+      status: input.status ?? "active",
+      lastMessageAt: input.lastMessageAt ?? now(),
+      createdBy: input.createdBy ?? mockUser.userId,
+      createdAt: now(),
+      updatedAt: now(),
+      metadata: input.metadata ?? {},
+    };
+    state().threads.push(thread);
+    return thread;
+  },
+
+  updateThread(threadId: string, patch: Partial<RoomThread>) {
+    const thread = this.getThread(threadId);
+    if (!thread) {
+      return null;
+    }
+    Object.assign(thread, patch, { updatedAt: now() });
+    return thread;
+  },
+
+  listMessages(roomId: string, threadId?: string | null) {
+    return state()
+      .messages.filter((message) => message.roomId === roomId && (!threadId || message.threadId === threadId))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   },
 
   createMessage(input: Pick<RoomMessage, "roomId" | "type" | "content"> & Partial<RoomMessage>) {
+    const thread = input.threadId ? this.getThread(input.threadId) : this.ensureRoomThread(input.roomId);
     const message: RoomMessage = {
       id: id(),
+      threadId: thread?.id ?? input.threadId ?? `${input.roomId}-thread-default`,
       senderUserId: input.senderUserId ?? mockUser.userId,
       senderAgentId: input.senderAgentId ?? null,
       agentRunId: input.agentRunId ?? null,
@@ -206,13 +295,16 @@ export const mockStore = {
       content: input.content,
     };
     state().messages.push(message);
+    this.updateThread(message.threadId, { lastMessageAt: message.createdAt });
     return message;
   },
 
   createAgentRun(input: Omit<AgentRun, "id" | "startedAt" | "tokenUsage" | "metadata" | "status"> & Partial<AgentRun>) {
+    const thread = input.threadId ? this.getThread(input.threadId) : this.ensureRoomThread(input.roomId);
     const run: AgentRun = {
       id: id(),
       roomId: input.roomId,
+      threadId: thread?.id ?? input.threadId ?? `${input.roomId}-thread-default`,
       agentId: input.agentId ?? null,
       initiatedBy: input.initiatedBy ?? mockUser.userId,
       anthropicSessionId: input.anthropicSessionId ?? null,
@@ -265,6 +357,10 @@ export const mockStore = {
 
   getMemory(roomId: string) {
     return state().memories.find((memory) => memory.roomId === roomId) ?? null;
+  },
+
+  listRoomMemoryStores(roomId: string) {
+    return state().memoryStores.filter((store) => store.roomId === roomId);
   },
 
   updateMemory(roomId: string, patch: Partial<DomainMemory>) {

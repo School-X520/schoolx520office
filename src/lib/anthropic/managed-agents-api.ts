@@ -37,11 +37,18 @@ export type ManagedSession = {
   usage?: Record<string, unknown>;
 };
 
-export type ManagedSessionResource = {
-  type: "file";
-  file_id: string;
-  mount_path?: string;
-};
+export type ManagedSessionResource =
+  | {
+      type: "file";
+      file_id: string;
+      mount_path?: string;
+    }
+  | {
+      type: "memory_store";
+      memory_store_id: string;
+      access?: "read_only" | "read_write";
+      prompt?: string;
+    };
 
 export type ManagedAgentEvent = {
   id?: string;

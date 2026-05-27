@@ -8,6 +8,7 @@ import type { Agent, AgentRun, MeetingImport, RoomMessage, SharedItem } from "@/
 
 export function RoomChat({
   roomId,
+  threadId,
   currentUserId,
   isMeeting,
   residentAgent,
@@ -17,6 +18,7 @@ export function RoomChat({
   imports,
 }: {
   roomId: string;
+  threadId: string;
   currentUserId: string;
   isMeeting: boolean;
   residentAgent?: Agent;
@@ -42,7 +44,7 @@ export function RoomChat({
   }
 
   function handleAgentRunQueued(run: AgentRun) {
-    const pendingMessage = createPendingAgentMessage(roomId, run);
+    const pendingMessage = createPendingAgentMessage(roomId, threadId, run);
     setMessages((current) => mergeMessages(current, [pendingMessage]));
     void pollAgentRun(run.id, pendingMessage.id);
   }
@@ -80,7 +82,7 @@ export function RoomChat({
           setMessages((current) =>
             mergeMessages(
               current.filter((message) => message.id !== pendingMessageId),
-              [createAgentFailureMessage(roomId, runId, checkedRun.error)],
+              [createAgentFailureMessage(roomId, threadId, runId, checkedRun.error)],
             ),
           );
           return;
@@ -108,6 +110,7 @@ export function RoomChat({
       />
       <MessageComposer
         roomId={roomId}
+        threadId={threadId}
         currentUserId={currentUserId}
         isMeeting={isMeeting}
         residentAgent={residentAgent}
@@ -121,10 +124,11 @@ export function RoomChat({
   );
 }
 
-function createPendingAgentMessage(roomId: string, run: AgentRun): RoomMessage {
+function createPendingAgentMessage(roomId: string, threadId: string, run: AgentRun): RoomMessage {
   return {
     id: `pending-${run.id}`,
     roomId,
+    threadId,
     senderUserId: null,
     senderAgentId: run.agentId ?? null,
     agentRunId: run.id,
@@ -135,10 +139,11 @@ function createPendingAgentMessage(roomId: string, run: AgentRun): RoomMessage {
   };
 }
 
-function createAgentFailureMessage(roomId: string, runId: string, error?: string | null): RoomMessage {
+function createAgentFailureMessage(roomId: string, threadId: string, runId: string, error?: string | null): RoomMessage {
   return {
     id: `failed-${runId}`,
     roomId,
+    threadId,
     senderUserId: null,
     senderAgentId: null,
     agentRunId: runId,

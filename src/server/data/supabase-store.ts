@@ -13,8 +13,10 @@ import type {
   MeetingImport,
   MemoryWriteReview,
   Room,
+  RoomMemoryStore,
   RoomMembership,
   RoomMessage,
+  RoomThread,
   SharedItem,
   Task,
   UserProfile,
@@ -42,6 +44,8 @@ type DbQuery = PromiseLike<DbResult> & {
 type LooseDb = { from: (table: string) => DbQuery };
 type CreateSharedItemInput = Pick<SharedItem, "sourceRoomId" | "title" | "summary"> &
   Partial<Omit<SharedItem, "id" | "createdAt">>;
+type CreateRoomThreadInput = Pick<RoomThread, "roomId" | "title"> &
+  Partial<Omit<RoomThread, "id" | "roomId" | "title" | "createdAt" | "updatedAt">>;
 type CreateImportInput = Pick<MeetingImport, "targetRoomId"> & Partial<Omit<MeetingImport, "id" | "createdAt">>;
 type CreateDecisionInput = Pick<Decision, "roomId" | "title"> & Partial<Omit<Decision, "id" | "createdAt">>;
 type CreateTaskInput = Pick<Task, "roomId" | "title"> & Partial<Omit<Task, "id" | "createdAt" | "updatedAt">>;
@@ -68,6 +72,17 @@ function assertOk<T>(data: unknown, error: DbError | null): T {
     throw new Error(error.message);
   }
   return data as T;
+}
+
+function isThreadSchemaMissing(error: DbError | null) {
+  if (!error?.message) {
+    return false;
+  }
+  return (
+    error.message.includes("room_threads") ||
+    error.message.includes("thread_id") ||
+    error.message.includes("schema cache")
+  );
 }
 
 function rows(data: unknown) {
@@ -102,6 +117,23 @@ function jsonObject(value: unknown) {
 
 function jsonArray(value: unknown) {
   return Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
+}
+
+function legacyThread(roomId: string): RoomThread {
+  const now = new Date().toISOString();
+  return {
+    id: `${roomId}-legacy-thread`,
+    roomId,
+    title: "기본 대화",
+    summary: "",
+    carryoverSummary: "",
+    status: "active",
+    lastMessageAt: now,
+    createdBy: null,
+    createdAt: now,
+    updatedAt: now,
+    metadata: { schemaFallback: true },
+  };
 }
 
 function roomFrom(rowValue: Record<string, unknown>): Room {
@@ -170,10 +202,28 @@ function agentFrom(rowValue: Record<string, unknown>): Agent {
   };
 }
 
-function messageFrom(rowValue: Record<string, unknown>): RoomMessage {
+function threadFrom(rowValue: Record<string, unknown>): RoomThread {
   return {
     id: text(rowValue.id),
     roomId: text(rowValue.room_id),
+    title: text(rowValue.title, "새 대화"),
+    summary: text(rowValue.summary),
+    carryoverSummary: text(rowValue.carryover_summary),
+    status: text(rowValue.status, "active") as RoomThread["status"],
+    lastMessageAt: text(rowValue.last_message_at, text(rowValue.created_at)),
+    createdBy: nullableText(rowValue.created_by),
+    createdAt: text(rowValue.created_at),
+    updatedAt: text(rowValue.updated_at),
+    metadata: jsonObject(rowValue.metadata),
+  };
+}
+
+function messageFrom(rowValue: Record<string, unknown>): RoomMessage {
+  const roomId = text(rowValue.room_id);
+  return {
+    id: text(rowValue.id),
+    roomId,
+    threadId: text(rowValue.thread_id, `${roomId}-legacy-thread`),
     senderUserId: nullableText(rowValue.sender_user_id),
     senderAgentId: nullableText(rowValue.sender_agent_id),
     agentRunId: nullableText(rowValue.agent_run_id),
@@ -199,10 +249,24 @@ function memoryFrom(rowValue: Record<string, unknown>): DomainMemory {
   };
 }
 
-function agentRunFrom(rowValue: Record<string, unknown>): AgentRun {
+function roomMemoryStoreFrom(rowValue: Record<string, unknown>): RoomMemoryStore {
   return {
     id: text(rowValue.id),
     roomId: text(rowValue.room_id),
+    anthropicMemoryStoreId: nullableText(rowValue.anthropic_memory_store_id),
+    accessMode: text(rowValue.access_mode, "read_write") as RoomMemoryStore["accessMode"],
+    purpose: text(rowValue.purpose),
+    createdAt: text(rowValue.created_at),
+    updatedAt: text(rowValue.updated_at),
+  };
+}
+
+function agentRunFrom(rowValue: Record<string, unknown>): AgentRun {
+  const roomId = text(rowValue.room_id);
+  return {
+    id: text(rowValue.id),
+    roomId,
+    threadId: text(rowValue.thread_id, `${roomId}-legacy-thread`),
     agentId: nullableText(rowValue.agent_id),
     initiatedBy: nullableText(rowValue.initiated_by),
     anthropicSessionId: nullableText(rowValue.anthropic_session_id),
@@ -565,17 +629,111 @@ export const supabaseStore = {
     return result ? membershipFrom(result) : null;
   },
 
-  async listMessages(roomId: string) {
+  async listThreads(roomId: string) {
     const { data, error } = await db()
-      .from("room_messages")
+      .from("room_threads")
       .select("*")
       .eq("room_id", roomId)
-      .order("created_at", { ascending: true });
+      .order("last_message_at", { ascending: false });
+    if (isThreadSchemaMissing(error)) {
+      return [legacyThread(roomId)];
+    }
+    return rows(assertOk(data, error)).map(threadFrom);
+  },
+
+  async getThread(threadId: string) {
+    const { data, error } = await db().from("room_threads").select("*").eq("id", threadId).maybeSingle();
+    if (isThreadSchemaMissing(error) && threadId.endsWith("-legacy-thread")) {
+      return legacyThread(threadId.slice(0, -"legacy-thread".length - 1));
+    }
+    const result = row(assertOk(data, error));
+    return result ? threadFrom(result) : null;
+  },
+
+  async ensureRoomThread(roomId: string, input: Partial<CreateRoomThreadInput> = {}) {
+    const threads = await this.listThreads(roomId);
+    const existing = threads.find((thread) => thread.status === "active") ?? threads[0];
+    if (existing) {
+      return existing;
+    }
+
+    return this.createThread({
+      roomId,
+      title: input.title ?? "기본 대화",
+      summary: input.summary ?? "",
+      carryoverSummary: input.carryoverSummary ?? "",
+      status: input.status ?? "active",
+      createdBy: input.createdBy ?? null,
+      metadata: { kind: "default", ...(input.metadata ?? {}) },
+    });
+  },
+
+  async createThread(input: CreateRoomThreadInput) {
+    const { data, error } = await db()
+      .from("room_threads")
+      .insert({
+        room_id: input.roomId,
+        title: input.title,
+        summary: input.summary ?? "",
+        carryover_summary: input.carryoverSummary ?? "",
+        status: input.status ?? "active",
+        last_message_at: input.lastMessageAt ?? new Date().toISOString(),
+        created_by: input.createdBy ?? null,
+        metadata: input.metadata ?? {},
+      })
+      .select("*")
+      .single();
+    if (isThreadSchemaMissing(error)) {
+      const migrationError = new Error("room_threads migration이 아직 적용되지 않았습니다.") as Error & { status: number };
+      migrationError.status = 503;
+      throw migrationError;
+    }
+    return threadFrom(row(assertOk(data, error))!);
+  },
+
+  async updateThread(threadId: string, patch: Partial<RoomThread>) {
+    const { data, error } = await db()
+      .from("room_threads")
+      .update({
+        title: patch.title,
+        summary: patch.summary,
+        carryover_summary: patch.carryoverSummary,
+        status: patch.status,
+        last_message_at: patch.lastMessageAt,
+        metadata: patch.metadata,
+      })
+      .eq("id", threadId)
+      .select("*")
+      .single();
+    if (isThreadSchemaMissing(error) && threadId.endsWith("-legacy-thread")) {
+      return { ...legacyThread(threadId.slice(0, -"legacy-thread".length - 1)), ...patch };
+    }
+    return threadFrom(row(assertOk(data, error))!);
+  },
+
+  async listMessages(roomId: string, threadId?: string | null) {
+    let query = db()
+      .from("room_messages")
+      .select("*")
+      .eq("room_id", roomId);
+    if (threadId) {
+      query = query.eq("thread_id", threadId);
+    }
+    const { data, error } = await query.order("created_at", { ascending: true });
+    if (isThreadSchemaMissing(error)) {
+      const fallback = await db()
+        .from("room_messages")
+        .select("*")
+        .eq("room_id", roomId)
+        .order("created_at", { ascending: true });
+      return rows(assertOk(fallback.data, fallback.error)).map(messageFrom);
+    }
     return rows(assertOk(data, error)).map(messageFrom);
   },
 
   async createMessage(input: {
     roomId: string;
+    threadId?: string | null;
     type: RoomMessage["type"];
     content: string;
     senderUserId?: string | null;
@@ -583,10 +741,12 @@ export const supabaseStore = {
     agentRunId?: string | null;
     metadata?: Record<string, unknown>;
   }) {
-    const { data, error } = await db()
+    const thread = input.threadId ? null : await this.ensureRoomThread(input.roomId);
+    let result = await db()
       .from("room_messages")
       .insert({
         room_id: input.roomId,
+        thread_id: input.threadId ?? thread?.id,
         type: input.type,
         content: input.content,
         sender_user_id: input.senderUserId ?? null,
@@ -596,13 +756,39 @@ export const supabaseStore = {
       })
       .select("*")
       .single();
-    return messageFrom(row(assertOk(data, error))!);
+    if (isThreadSchemaMissing(result.error)) {
+      result = await db()
+        .from("room_messages")
+        .insert({
+          room_id: input.roomId,
+          type: input.type,
+          content: input.content,
+          sender_user_id: input.senderUserId ?? null,
+          sender_agent_id: input.senderAgentId ?? null,
+          agent_run_id: input.agentRunId ?? null,
+          metadata: input.metadata ?? {},
+        })
+        .select("*")
+        .single();
+    }
+    const message = messageFrom(row(assertOk(result.data, result.error))!);
+    await this.updateThread(message.threadId, { lastMessageAt: message.createdAt }).catch(() => null);
+    return message;
   },
 
   async getMemory(roomId: string) {
     const { data, error } = await db().from("domain_memory").select("*").eq("room_id", roomId).maybeSingle();
     const result = row(assertOk(data, error));
     return result ? memoryFrom(result) : null;
+  },
+
+  async listRoomMemoryStores(roomId: string) {
+    const { data, error } = await db()
+      .from("room_memory_stores")
+      .select("*")
+      .eq("room_id", roomId)
+      .order("created_at", { ascending: true });
+    return rows(assertOk(data, error)).map(roomMemoryStoreFrom);
   },
 
   async updateMemory(roomId: string, patch: Partial<DomainMemory>) {
@@ -651,10 +837,12 @@ export const supabaseStore = {
   },
 
   async createAgentRun(input: Partial<AgentRun> & Pick<AgentRun, "roomId" | "mode" | "runType">) {
-    const { data, error } = await db()
+    const thread = input.threadId ? null : await this.ensureRoomThread(input.roomId);
+    let result = await db()
       .from("agent_runs")
       .insert({
         room_id: input.roomId,
+        thread_id: input.threadId ?? thread?.id,
         agent_id: input.agentId ?? null,
         initiated_by: input.initiatedBy ?? null,
         anthropic_session_id: input.anthropicSessionId ?? null,
@@ -672,13 +860,37 @@ export const supabaseStore = {
       })
       .select("*")
       .single();
-    return agentRunFrom(row(assertOk(data, error))!);
+    if (isThreadSchemaMissing(result.error)) {
+      result = await db()
+        .from("agent_runs")
+        .insert({
+          room_id: input.roomId,
+          agent_id: input.agentId ?? null,
+          initiated_by: input.initiatedBy ?? null,
+          anthropic_session_id: input.anthropicSessionId ?? null,
+          mode: input.mode,
+          run_type: input.runType,
+          guest_source_room_id: input.guestSourceRoomId ?? null,
+          status: input.status ?? "queued",
+          input_message_id: input.inputMessageId ?? null,
+          output_message_id: input.outputMessageId ?? null,
+          session_summary: input.sessionSummary ?? null,
+          token_usage: input.tokenUsage ?? {},
+          error: input.error ?? null,
+          ended_at: input.endedAt ?? null,
+          metadata: input.metadata ?? {},
+        })
+        .select("*")
+        .single();
+    }
+    return agentRunFrom(row(assertOk(result.data, result.error))!);
   },
 
   async updateAgentRun(runId: string, patch: Partial<AgentRun>) {
     const { data, error } = await db()
       .from("agent_runs")
       .update({
+        thread_id: patch.threadId,
         status: patch.status,
         anthropic_session_id: patch.anthropicSessionId,
         output_message_id: patch.outputMessageId,

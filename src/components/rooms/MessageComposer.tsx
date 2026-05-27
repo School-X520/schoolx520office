@@ -10,6 +10,7 @@ type SubmitKind = "message" | "resident_agent" | "guest_agent";
 
 export function MessageComposer({
   roomId,
+  threadId,
   currentUserId,
   isMeeting,
   residentAgent,
@@ -20,6 +21,7 @@ export function MessageComposer({
   onAgentRunQueued,
 }: {
   roomId: string;
+  threadId: string;
   currentUserId: string;
   isMeeting: boolean;
   residentAgent?: Agent;
@@ -44,7 +46,7 @@ export function MessageComposer({
       return;
     }
 
-    const optimisticMessage = createOptimisticMessage(roomId, currentUserId, content);
+    const optimisticMessage = createOptimisticMessage(roomId, threadId, currentUserId, content);
     onOptimisticMessage(optimisticMessage);
     setValue("");
     setError(null);
@@ -60,15 +62,16 @@ export function MessageComposer({
       const endpoint = isAgentRun ? `/api/rooms/${roomId}/agent-runs` : `/api/rooms/${roomId}/messages`;
       const body =
         kind === "resident_agent" && residentAgent
-          ? { message: content, mode: "room", agentId: residentAgent.id }
+          ? { message: content, threadId, mode: "room", agentId: residentAgent.id }
           : kind === "guest_agent" && guestAgent
             ? {
                 message: content,
+                threadId,
                 mode: "meeting_guest",
                 agentId: guestAgent.id,
                 guestSourceRoomId: guestAgent.roomId,
               }
-            : { content };
+            : { content, threadId };
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -109,7 +112,7 @@ export function MessageComposer({
     const messageResponse = await fetch(`/api/rooms/${roomId}/messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, threadId }),
     });
     const messagePayload = (await messageResponse.json()) as { error?: string; message?: RoomMessage };
     if (!messageResponse.ok || !messagePayload.message) {
@@ -143,6 +146,7 @@ export function MessageComposer({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         message: content,
+        threadId,
         inputMessageId,
         mode: "meeting_guest",
         agentId: agent.id,
@@ -262,10 +266,11 @@ export function MessageComposer({
   );
 }
 
-function createOptimisticMessage(roomId: string, currentUserId: string, content: string): RoomMessage {
+function createOptimisticMessage(roomId: string, threadId: string, currentUserId: string, content: string): RoomMessage {
   return {
     id: `optimistic-${crypto.randomUUID()}`,
     roomId,
+    threadId,
     senderUserId: currentUserId,
     senderAgentId: null,
     agentRunId: null,

@@ -13,10 +13,15 @@ export async function finalizeAgentRun(agentRunId: string) {
   }
 
   const output = run.outputMessageId
-    ? (await source.listMessages(run.roomId)).find((message) => message.id === run.outputMessageId)
+    ? (await source.listMessages(run.roomId, run.threadId)).find((message) => message.id === run.outputMessageId)
     : null;
 
   const summary = output?.content.slice(0, 220) ?? "에이전트 실행이 완료되었습니다.";
+  await source.updateThread(run.threadId, {
+    summary,
+    lastMessageAt: output?.createdAt ?? new Date().toISOString(),
+  });
+
   await updateRoomMemory(
     run.roomId,
     {

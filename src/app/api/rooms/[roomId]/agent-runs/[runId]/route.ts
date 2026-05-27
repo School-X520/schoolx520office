@@ -21,7 +21,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ roomId: st
     }
 
     const outputMessage = run.outputMessageId
-      ? (await source.listMessages(roomId)).find((message) => message.id === run.outputMessageId)
+      ? (await source.listMessages(roomId, run.threadId)).find((message) => message.id === run.outputMessageId)
       : null;
 
     return jsonOk({ run, outputMessage });

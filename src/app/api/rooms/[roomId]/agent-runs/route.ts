@@ -12,6 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ roo
     const body = (await request.json()) as {
       message?: string;
       mode?: "room" | "meeting_guest";
+      threadId?: string;
       agentId?: string;
       guestSourceRoomId?: string;
       inputMessageId?: string;
@@ -19,6 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ roo
     const result = await startAgentRun({
       userId: user.userId,
       roomId,
+      threadId: body.threadId ?? null,
       message: body.message?.trim() || "도움이 필요합니다.",
       inputMessageId: body.inputMessageId ?? null,
       mode: body.mode ?? "room",

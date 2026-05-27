@@ -70,6 +70,20 @@ export type RoomMembership = {
   joinedAt: string;
 };
 
+export type RoomThread = {
+  id: string;
+  roomId: string;
+  title: string;
+  summary: string;
+  carryoverSummary: string;
+  status: "active" | "archived";
+  lastMessageAt: string;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  metadata: JsonObject;
+};
+
 export type Agent = {
   id: string;
   roomId: string;
@@ -89,6 +103,7 @@ export type Agent = {
 export type RoomMessage = {
   id: string;
   roomId: string;
+  threadId: string;
   senderUserId?: string | null;
   senderAgentId?: string | null;
   agentRunId?: string | null;
@@ -101,6 +116,7 @@ export type RoomMessage = {
 export type AgentRun = {
   id: string;
   roomId: string;
+  threadId: string;
   agentId?: string | null;
   initiatedBy?: string | null;
   anthropicSessionId?: string | null;
@@ -138,6 +154,16 @@ export type DomainMemory = {
   metadata: JsonObject;
   updatedAt: string;
   updatedByAgentRun?: string | null;
+};
+
+export type RoomMemoryStore = {
+  id: string;
+  roomId: string;
+  anthropicMemoryStoreId?: string | null;
+  accessMode: "read_only" | "read_write";
+  purpose: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type FileRecord = {
@@ -291,6 +317,8 @@ export type RoomViewModel = {
   guestAgents?: Agent[];
   membership?: RoomMembership;
   memory: DomainMemory;
+  threads: RoomThread[];
+  activeThread: RoomThread;
   messages: RoomMessage[];
   files: FileRecord[];
   sharedItems: SharedItem[];

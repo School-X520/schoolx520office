@@ -248,6 +248,7 @@ function compactMessage(message: RoomMessage) {
     senderUserId: message.senderUserId,
     senderAgentId: message.senderAgentId,
     agentRunId: message.agentRunId,
+    threadId: message.threadId,
     content: message.content.length > 1200 ? `${message.content.slice(0, 1200)}...` : message.content,
     createdAt: message.createdAt,
   };

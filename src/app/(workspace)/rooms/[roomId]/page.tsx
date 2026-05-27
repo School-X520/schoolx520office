@@ -13,15 +13,22 @@ export function generateStaticParams() {
   return mockStore.listRooms().map((room) => ({ roomId: room.id }));
 }
 
-export default async function RoomPage({ params }: { params: Promise<{ roomId: string }> }) {
+export default async function RoomPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ roomId: string }>;
+  searchParams: Promise<{ threadId?: string }>;
+}) {
   const { roomId } = await params;
+  const { threadId } = await searchParams;
   const user = await requireUser().catch((error) => {
     if (error instanceof AuthError) {
       return redirectToLogin(`/rooms/${roomId}`);
     }
     throw error;
   });
-  const view = await getRoomView(user.userId, roomId);
+  const view = await getRoomView(user.userId, roomId, { threadId });
   if (!view) {
     notFound();
   }

@@ -1,7 +1,11 @@
 import "server-only";
 
 import { shouldUseMockData } from "@/lib/env";
-import { getManagedAgentsClientFromEnv, type ManagedAgentEvent } from "@/lib/anthropic/managed-agents-api";
+import {
+  getManagedAgentsClientFromEnv,
+  type ManagedAgentEvent,
+  type ManagedSessionResource,
+} from "@/lib/anthropic/managed-agents-api";
 import type { AgentAdapter } from "@/server/agents/types";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
@@ -76,7 +80,16 @@ export class RealClaudeManagedAgentAdapter implements AgentAdapter {
 
     try {
       streamResponse = await client.openEventStream(session.id, controller.signal);
-      await client.sendUserMessage(session.id, formatManagedAgentPrompt(input, connectedAgent.name, mountedFiles, sessionResult.fileMountError));
+      await client.sendUserMessage(
+        session.id,
+        formatManagedAgentPrompt(
+          input,
+          connectedAgent.name,
+          mountedFiles,
+          sessionResult.fileMountError,
+          sessionResult.memoryMountError,
+        ),
+      );
       const streamed = await readEventStream(streamResponse, controller.signal, async (blockingEvents) => {
         const toolResultEvents: ManagedAgentEvent[] = [];
         for (const event of blockingEvents) {
@@ -144,25 +157,58 @@ async function createSessionWithFileFallback(input: {
   mountedFiles: MountedAgentFile[];
   events: ManagedAgentEvent[];
 }) {
+  const { fileResources, memoryResources } = buildManagedSessionResources(
+    input.mountedFiles,
+    input.input.memoryAttachments,
+  );
+
   try {
     const session = await input.client.createSession({
       agentId: input.agent.anthropicAgentId!,
       environmentId: input.agent.anthropicEnvironmentId!,
       title: `${input.agent.name} · ${input.input.mode}`,
-      resources: input.mountedFiles.map((file) => ({
-        type: "file",
-        file_id: file.anthropicFileId,
-        mount_path: file.mountPath,
-      })),
+      resources: [...fileResources, ...memoryResources],
       metadata: {
         schoolx_agent_id: input.agent.id,
         schoolx_room_id: input.input.roomId,
+        schoolx_thread_id: input.input.threadId,
         schoolx_mode: input.input.mode,
         schoolx_mounted_file_count: String(input.mountedFiles.length),
+        schoolx_memory_store_count: String(memoryResources.length),
       },
     });
-    return { session, mountedFiles: input.mountedFiles, fileMountError: null };
+    return { session, mountedFiles: input.mountedFiles, fileMountError: null, memoryMountError: null };
   } catch (error) {
+    if (memoryResources.length) {
+      const memoryMountError = error instanceof Error ? error.message : String(error);
+      input.events.push({
+        type: "schoolx.memory_store_session_failed",
+        error: memoryMountError,
+        memoryStoreCount: memoryResources.length,
+      });
+
+      try {
+        const session = await input.client.createSession({
+          agentId: input.agent.anthropicAgentId!,
+          environmentId: input.agent.anthropicEnvironmentId!,
+          title: `${input.agent.name} · ${input.input.mode}`,
+          resources: fileResources,
+          metadata: {
+            schoolx_agent_id: input.agent.id,
+            schoolx_room_id: input.input.roomId,
+            schoolx_thread_id: input.input.threadId,
+            schoolx_mode: input.input.mode,
+            schoolx_mounted_file_count: String(input.mountedFiles.length),
+            schoolx_memory_store_count: "0",
+            schoolx_memory_store_fallback: "true",
+          },
+        });
+        return { session, mountedFiles: input.mountedFiles, fileMountError: null, memoryMountError };
+      } catch (fileError) {
+        error = fileError;
+      }
+    }
+
     if (!input.mountedFiles.length) {
       throw error;
     }
@@ -181,13 +227,39 @@ async function createSessionWithFileFallback(input: {
       metadata: {
         schoolx_agent_id: input.agent.id,
         schoolx_room_id: input.input.roomId,
+        schoolx_thread_id: input.input.threadId,
         schoolx_mode: input.input.mode,
         schoolx_mounted_file_count: "0",
         schoolx_file_mount_fallback: "true",
+        schoolx_memory_store_count: "0",
       },
     });
-    return { session, mountedFiles: [], fileMountError };
+    return { session, mountedFiles: [], fileMountError, memoryMountError: memoryResources.length ? "memory store fallback also removed file resources" : null };
   }
+}
+
+export function buildManagedSessionResources(
+  mountedFiles: MountedAgentFile[],
+  memoryAttachments: AgentRunInput["memoryAttachments"] = [],
+) {
+  const fileResources = mountedFiles.map(
+    (file): ManagedSessionResource => ({
+      type: "file",
+      file_id: file.anthropicFileId,
+      mount_path: file.mountPath,
+    }),
+  );
+  const memoryResources = memoryAttachments
+    .filter((attachment) => attachment.memoryStoreId)
+    .map(
+      (attachment): ManagedSessionResource => ({
+        type: "memory_store",
+        memory_store_id: attachment.memoryStoreId!,
+        access: "read_only",
+        prompt: `${attachment.purpose} Room ID: ${attachment.roomId}. Treat this as read-only SchoolX long-term memory.`,
+      }),
+    );
+  return { fileResources, memoryResources };
 }
 
 async function safeImportGeneratedFiles(
@@ -266,6 +338,7 @@ export function formatManagedAgentPrompt(
   agentName: string,
   mountedFiles: MountedAgentFile[] = [],
   fileMountError: string | null = null,
+  memoryMountError: string | null = null,
 ) {
   return [
     "너는 교과연구회 AI Office의 업무방 봇이다.",
@@ -280,6 +353,9 @@ export function formatManagedAgentPrompt(
     fileMountError
       ? "주의: 이번 실행에서는 외부 API 문제로 파일 마운트가 실패했다. 파일 내용이 필요한 요청이면 사용자에게 잠시 후 재시도 또는 텍스트 발췌 제공을 요청하라."
       : null,
+    memoryMountError
+      ? "주의: 이번 실행에서는 Claude Memory Store 연결이 실패했다. 앱 컨텍스트의 방 요약과 thread 요약을 우선 사용하고, 필요한 과거 원문은 SchoolX search_room_messages 도구로 확인하라."
+      : null,
     input.mode === "meeting_guest"
       ? "현재 메인 회의방에 게스트로 호출되었다. 메인방의 사람 발언과 다른 봇 발언을 모두 읽고, 네 담당 업무 관점의 의견, 우려, 다음 행동을 5문장 이내로 제안하라."
       : "현재 담당 업무방 상주 봇으로 응답한다. 실행 가능한 다음 단계와 필요한 자료를 명확히 구분하라.",
@@ -287,6 +363,7 @@ export function formatManagedAgentPrompt(
     "",
     `[봇] ${agentName}`,
     `[roomId] ${input.roomId}`,
+    `[threadId] ${input.threadId}`,
     `[mode] ${input.mode}`,
     input.guestSourceRoomId ? `[guestSourceRoomId] ${input.guestSourceRoomId}` : null,
     "",
