@@ -6,7 +6,7 @@ import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { copyRoomFileToRoom, downloadRoomFileToLocalAndOpen } from "@/server/files/file-service";
-import type { JsonObject, MeetingImport } from "@/types/domain";
+import type { FileRecord, JsonObject, MeetingImport } from "@/types/domain";
 
 type DbError = { message: string };
 type LooseDb = {
@@ -54,6 +54,69 @@ async function requireWritableImport(input: { userId: string; importId: string }
     throw statusError("반입 항목을 처리할 권한이 없습니다.", 403);
   }
   return { source, item };
+}
+
+async function canWriteAnyRoom(userId: string, roomIds: Array<string | null | undefined>) {
+  for (const roomId of roomIds.filter((id): id is string => Boolean(id))) {
+    try {
+      const membership = await requireRoomMember(userId, roomId);
+      if (canWriteRoom(membership.role)) {
+        return roomId;
+      }
+    } catch {
+      // Try the next candidate room.
+    }
+  }
+  return null;
+}
+
+function fileShareSummary(fileName: string, targetRoomName: string) {
+  return `${fileName} 파일을 ${targetRoomName}에 공유합니다.`;
+}
+
+async function grantRoomFileAccess(input: {
+  userId: string;
+  fileId: string;
+  sourceRoomId: string;
+  targetRoomId: string;
+  sharedItemId: string;
+}) {
+  if (shouldUseMockData()) {
+    mockStore.grantFileAccess(input.targetRoomId, input.fileId, "read");
+    return;
+  }
+
+  const admin = getSupabaseAdminClient();
+  if (!admin) {
+    throw new Error("Supabase service role is not configured.");
+  }
+
+  const db = admin as unknown as LooseDb;
+  const { error } = await db.from("file_room_access").upsert(
+    {
+      file_id: input.fileId,
+      room_id: input.targetRoomId,
+      access_level: "read",
+      added_by: input.userId,
+    },
+    { onConflict: "file_id,room_id" },
+  );
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await supabaseStore.addAuditLog({
+    actorUserId: input.userId,
+    roomId: input.targetRoomId,
+    action: input.targetRoomId === "meeting" ? "file.shared_to_meeting" : "file.shared_to_room",
+    targetType: "file",
+    targetId: input.fileId,
+    metadata: {
+      sourceRoomId: input.sourceRoomId,
+      sharedItemId: input.sharedItemId,
+      accessLevel: "read",
+    },
+  });
 }
 
 async function markImportPendingContextProcessed(input: { roomId: string; meetingImportId: string }) {
@@ -109,10 +172,11 @@ export async function shareMessageToMeeting(input: {
   });
 
   if (sharedFile) {
-    await grantMeetingFileAccess({
+    await grantRoomFileAccess({
       userId: input.userId,
       fileId: sharedFile.id,
       sourceRoomId: input.sourceRoomId,
+      targetRoomId: "meeting",
       sharedItemId: item.id,
     });
   }
@@ -129,47 +193,123 @@ export async function shareMessageToMeeting(input: {
   return item;
 }
 
-async function grantMeetingFileAccess(input: {
+export async function listFileShareTargetRooms(input: {
   userId: string;
-  fileId: string;
   sourceRoomId: string;
-  sharedItemId: string;
 }) {
-  if (shouldUseMockData()) {
-    return;
+  await requireRoomMember(input.userId, input.sourceRoomId);
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const [rooms, memberships] = await Promise.all([
+    source.listRooms(),
+    shouldUseMockData()
+      ? Promise.resolve(mockStore.listMemberships().filter((membership) => membership.userId === input.userId))
+      : supabaseStore.listMemberships(input.userId),
+  ]);
+  const roleByRoomId = new Map(memberships.map((membership) => [membership.roomId, membership.role]));
+  return rooms
+    .filter((room) => room.isActive && room.id !== input.sourceRoomId && canWriteRoom(roleByRoomId.get(room.id)))
+    .map((room) => ({
+      id: room.id,
+      name: room.name,
+      type: room.type,
+      role: roleByRoomId.get(room.id),
+    }));
+}
+
+export async function shareFilesToRooms(input: {
+  userId: string;
+  sourceRoomId: string;
+  sourceFileIds: string[];
+  targetRoomIds: string[];
+}) {
+  const sourceMembership = await requireRoomMember(input.userId, input.sourceRoomId);
+  if (!canWriteRoom(sourceMembership.role)) {
+    throw statusError("파일을 공유할 권한이 없습니다.", 403);
+  }
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const sourceRoom = await source.getRoom(input.sourceRoomId);
+  const sourceRoomName = sourceRoom?.name ?? input.sourceRoomId;
+  const fileIds = [...new Set(input.sourceFileIds.map((fileId) => fileId.trim()).filter(Boolean))];
+  const targetRoomIds = [...new Set(input.targetRoomIds.map((roomId) => roomId.trim()).filter(Boolean))]
+    .filter((roomId) => roomId !== input.sourceRoomId);
+
+  if (!fileIds.length) {
+    throw statusError("공유할 파일을 선택해 주세요.", 400);
+  }
+  if (!targetRoomIds.length) {
+    throw statusError("공유할 방을 선택해 주세요.", 400);
   }
 
-  const admin = getSupabaseAdminClient();
-  if (!admin) {
-    throw new Error("Supabase service role is not configured.");
+  const sourceFiles = await source.listFiles(input.sourceRoomId);
+  const fileById = new Map(sourceFiles.map((file) => [file.id, file]));
+  const missingFileId = fileIds.find((fileId) => !fileById.has(fileId));
+  if (missingFileId) {
+    throw statusError("공유할 파일을 찾을 수 없습니다.", 404);
   }
 
-  const db = admin as unknown as LooseDb;
-  const { error } = await db.from("file_room_access").upsert(
-    {
-      file_id: input.fileId,
-      room_id: "meeting",
-      access_level: "read",
-      added_by: input.userId,
-    },
-    { onConflict: "file_id,room_id" },
+  const targetRooms = await Promise.all(
+    targetRoomIds.map(async (targetRoomId) => {
+      const membership = await requireRoomMember(input.userId, targetRoomId);
+      if (!canWriteRoom(membership.role)) {
+        throw statusError("선택한 방에 공유할 권한이 없습니다.", 403);
+      }
+      const room = await source.getRoom(targetRoomId);
+      if (!room?.isActive) {
+        throw statusError("공유할 수 없는 방이 포함되어 있습니다.", 400);
+      }
+      return room;
+    }),
   );
-  if (error) {
-    throw new Error(error.message);
+
+  const sharedItems = [];
+  for (const targetRoom of targetRooms) {
+    for (const fileId of fileIds) {
+      const file = fileById.get(fileId) as FileRecord;
+      const summary = fileShareSummary(file.originalName, targetRoom.name);
+      const item = await source.createSharedItem({
+        sourceRoomId: input.sourceRoomId,
+        targetRoomId: targetRoom.id,
+        sourceFileId: file.id,
+        title: file.originalName,
+        summary,
+        sharedBy: input.userId,
+        metadata: {
+          sourceRoomName,
+          targetRoomName: targetRoom.name,
+          shareKind: "direct_file_share",
+        },
+      });
+      await grantRoomFileAccess({
+        userId: input.userId,
+        fileId: file.id,
+        sourceRoomId: input.sourceRoomId,
+        targetRoomId: targetRoom.id,
+        sharedItemId: item.id,
+      });
+      await source.createMessage({
+        roomId: targetRoom.id,
+        type: "shared_item",
+        content: `${item.title}\n\n${item.summary}`,
+        senderUserId: input.userId,
+        metadata: { sharedItemId: item.id, sourceRoomId: input.sourceRoomId, sourceFileId: file.id },
+      });
+      await source.addAuditLog({
+        actorUserId: input.userId,
+        roomId: input.sourceRoomId,
+        action: "shared_item.created",
+        targetType: "shared_item",
+        targetId: item.id,
+        metadata: {
+          targetRoomId: targetRoom.id,
+          sourceFileId: file.id,
+          shareKind: "direct_file_share",
+        },
+      });
+      sharedItems.push(item);
+    }
   }
 
-  await supabaseStore.addAuditLog({
-    actorUserId: input.userId,
-    roomId: "meeting",
-    action: "file.shared_to_meeting",
-    targetType: "file",
-    targetId: input.fileId,
-    metadata: {
-      sourceRoomId: input.sourceRoomId,
-      sharedItemId: input.sharedItemId,
-      accessLevel: "read",
-    },
-  });
+  return { sharedItems };
 }
 
 export async function importMeetingMessageToRoom(input: {
@@ -332,24 +472,114 @@ export async function createTaskFromMeetingImport(input: {
   return { meetingImport: updatedImport, task, processedContextIds };
 }
 
+export async function deleteSharedItem(input: {
+  userId: string;
+  sharedItemId: string;
+}) {
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const sharedItem = (await source.listSharedItems()).find((item) => item.id === input.sharedItemId);
+  if (!sharedItem) {
+    throw statusError("공유 항목을 찾을 수 없습니다.", 404);
+  }
+  const writableRoomId = await canWriteAnyRoom(input.userId, [sharedItem.targetRoomId, sharedItem.sourceRoomId]);
+  if (!writableRoomId) {
+    throw statusError("공유 항목을 삭제할 권한이 없습니다.", 403);
+  }
+
+  const deleted = await source.deleteSharedItem(sharedItem.id, input.userId);
+  await source.addAuditLog({
+    actorUserId: input.userId,
+    roomId: writableRoomId,
+    action: "shared_item.deleted",
+    targetType: "shared_item",
+    targetId: sharedItem.id,
+    metadata: {
+      sourceRoomId: sharedItem.sourceRoomId,
+      targetRoomId: sharedItem.targetRoomId,
+      sourceFileId: sharedItem.sourceFileId,
+    },
+  });
+
+  return { sharedItem: deleted };
+}
+
+export async function deleteMeetingImport(input: {
+  userId: string;
+  importId: string;
+}) {
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const item = (await source.listImports()).find((meetingImport) => meetingImport.id === input.importId);
+  if (!item) {
+    throw statusError("반입 항목을 찾을 수 없습니다.", 404);
+  }
+  const writableRoomId = await canWriteAnyRoom(input.userId, [item.targetRoomId, item.meetingRoomId]);
+  if (!writableRoomId) {
+    throw statusError("반입 항목을 삭제할 권한이 없습니다.", 403);
+  }
+  const processedContextIds = await markImportPendingContextProcessed({
+    roomId: item.targetRoomId,
+    meetingImportId: item.id,
+  });
+  const deleted = await source.updateImport(item.id, {
+    status: "dismissed",
+    metadata: {
+      ...item.metadata,
+      deletedAt: new Date().toISOString(),
+      deletedBy: input.userId,
+      processedContextIds,
+    },
+  });
+  await source.addAuditLog({
+    actorUserId: input.userId,
+    roomId: writableRoomId,
+    action: "meeting_import.deleted",
+    targetType: "meeting_import",
+    targetId: item.id,
+    metadata: {
+      targetRoomId: item.targetRoomId,
+      meetingRoomId: item.meetingRoomId,
+      sourceFileId: item.sourceFileId,
+      processedContextIds,
+    },
+  });
+
+  return { meetingImport: deleted, processedContextIds };
+}
+
 export async function openSharedItemOriginal(input: {
   userId: string;
   sharedItemId: string;
   downloadDir?: string | null;
 }) {
-  await requireRoomMember(input.userId, "meeting");
   const source = shouldUseMockData() ? mockStore : supabaseStore;
-  const sharedItem = (await source.listSharedItems("meeting")).find((item) => item.id === input.sharedItemId);
+  const sharedItem = (await source.listSharedItems()).find((item) => item.id === input.sharedItemId);
   if (!sharedItem) {
     throw statusError("공유 항목을 찾을 수 없습니다.", 404);
   }
   if (!sharedItem.sourceFileId) {
     throw statusError("연결된 원본 파일이 없습니다.", 404);
   }
+  const candidateRoomIds = [...new Set([sharedItem.targetRoomId, sharedItem.sourceRoomId].filter(Boolean))];
+  let downloadRoomId: string | null = null;
+  for (const roomId of candidateRoomIds) {
+    try {
+      await requireRoomMember(input.userId, roomId);
+      const files = await source.listFiles(roomId);
+      if (files.some((file) => file.id === sharedItem.sourceFileId)) {
+        downloadRoomId = roomId;
+        break;
+      }
+    } catch {
+      // Try the next room the shared item is associated with.
+    }
+  }
+  if (!downloadRoomId) {
+    throw statusError("원본 파일을 열 권한이 없거나 파일 접근 권한이 없습니다.", 403);
+  }
 
   return downloadRoomFileToLocalAndOpen({
     userId: input.userId,
-    roomId: "meeting",
+    roomId: downloadRoomId,
     fileId: sharedItem.sourceFileId,
     downloadDir: input.downloadDir,
   });

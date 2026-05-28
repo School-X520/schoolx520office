@@ -23,7 +23,7 @@ export function MessageBubble({
     const item = sharedItems.find((shared) => shared.id === message.metadata.sharedItemId);
     if (item) {
       return (
-        <div className="mx-auto w-full max-w-2xl">
+        <div className="motion-continuity-item mx-auto w-full max-w-2xl">
           <div className="mb-1 flex justify-end">
             <MessageCopyButton text={message.content} />
           </div>
@@ -36,7 +36,7 @@ export function MessageBubble({
     const item = imports.find((imported) => imported.id === message.metadata.meetingImportId);
     if (item) {
       return (
-        <div className="mx-auto w-full max-w-2xl">
+        <div className="motion-continuity-item mx-auto w-full max-w-2xl">
           <div className="mb-1 flex justify-end">
             <MessageCopyButton text={message.content} />
           </div>
@@ -62,7 +62,7 @@ export function MessageBubble({
 
   if (isSystem) {
     return (
-      <div className="flex justify-center">
+      <div className="motion-continuity-item flex justify-center">
         <div className="max-w-2xl rounded-lg border border-line bg-paper-deep/70 px-3 py-2 text-center text-sm text-ink-soft shadow-sm">
           <div className="mb-1 flex items-center justify-center gap-1.5 text-xs font-medium">
             {message.type === "video_meeting" ? <Video className="size-3.5 text-bronze" /> : null}
@@ -76,7 +76,7 @@ export function MessageBubble({
   }
 
   return (
-    <article className={cn("flex w-full gap-2", isOwn ? "justify-end" : "justify-start")}>
+    <article className={cn("motion-continuity-item flex w-full gap-2", isOwn ? "justify-end" : "justify-start")}>
       {!isOwn ? (
         <div
           className={cn(

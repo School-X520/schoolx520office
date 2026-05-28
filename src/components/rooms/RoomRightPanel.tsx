@@ -31,8 +31,12 @@ export function RoomRightPanel({
 }) {
   return (
     <div className="min-w-0 space-y-4">
-      {agent ? <AgentPersonaEditor roomId={roomId} agent={agent} canEdit={canEditAgentPersona} /> : null}
-      <WarmCard>
+      {agent ? (
+        <div className="motion-continuity-enter">
+          <AgentPersonaEditor roomId={roomId} agent={agent} canEdit={canEditAgentPersona} />
+        </div>
+      ) : null}
+      <WarmCard className="motion-continuity-enter motion-stagger-1">
         <p className="text-sm font-semibold">방 요약</p>
         <p className="mt-2 text-sm text-pretty text-ink-soft">{memory.summary}</p>
         {memory.pendingContext.length ? (
@@ -41,8 +45,10 @@ export function RoomRightPanel({
           </div>
         ) : null}
       </WarmCard>
-      <FileList files={files} roomId={roomId} />
-      <WarmCard>
+      <div className="motion-continuity-enter motion-stagger-2">
+        <FileList files={files} roomId={roomId} />
+      </div>
+      <WarmCard className="motion-continuity-enter motion-stagger-3">
         <p className="mb-3 text-sm font-semibold">공유/반입</p>
         <div className="space-y-3">
           {sharedItems.slice(0, 2).map((item) => <SharedItemCard key={item.id} item={item} />)}
@@ -50,7 +56,9 @@ export function RoomRightPanel({
           {!sharedItems.length && !imports.length ? <p className="text-sm text-ink-soft">아직 공유/반입 항목이 없습니다.</p> : null}
         </div>
       </WarmCard>
-      <DecisionTaskPanel roomId={roomId} decisions={decisions} tasks={tasks} taskTargetRooms={taskTargetRooms} />
+      <div className="motion-continuity-enter motion-stagger-3">
+        <DecisionTaskPanel roomId={roomId} decisions={decisions} tasks={tasks} taskTargetRooms={taskTargetRooms} />
+      </div>
     </div>
   );
 }

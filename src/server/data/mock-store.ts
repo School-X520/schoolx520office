@@ -49,6 +49,8 @@ type MockState = {
   videoMeetings: VideoMeeting[];
   videoArtifacts: VideoMeetingArtifact[];
   videoEvents: VideoMeetingEvent[];
+  removedFileAccess: Array<{ roomId: string; fileId: string }>;
+  sharedFileAccess: Array<{ roomId: string; fileId: string; accessLevel: FileRecord["accessLevel"] }>;
 };
 
 const globalKey = "__schoolx_mock_state__";
@@ -177,6 +179,8 @@ function initialState(): MockState {
     videoMeetings: [],
     videoArtifacts: [],
     videoEvents: [],
+    removedFileAccess: [],
+    sharedFileAccess: [],
   };
 }
 
@@ -506,7 +510,23 @@ export const mockStore = {
   },
 
   listFiles(roomId: string) {
-    return state().files.filter((file) => file.storagePath.startsWith(`${roomId}/`) || roomId === "meeting");
+    const removed = new Set(
+      state()
+        .removedFileAccess.filter((access) => access.roomId === roomId)
+        .map((access) => access.fileId),
+    );
+    const sharedAccess = new Map(
+      state()
+        .sharedFileAccess.filter((access) => access.roomId === roomId)
+        .map((access) => [access.fileId, access.accessLevel]),
+    );
+    return state()
+      .files.filter((file) => file.storagePath.startsWith(`${roomId}/`) || roomId === "meeting" || sharedAccess.has(file.id))
+      .filter((file) => !removed.has(file.id))
+      .map((file) => ({
+        ...file,
+        accessLevel: sharedAccess.get(file.id) ?? file.accessLevel,
+      }));
   },
 
   addFile(input: Omit<FileRecord, "id" | "createdAt" | "versionNo" | "accessLevel"> & Partial<FileRecord>) {
@@ -526,9 +546,37 @@ export const mockStore = {
     return file;
   },
 
+  removeFileFromRoom(roomId: string, fileId: string) {
+    state().removedFileAccess.push({ roomId, fileId });
+    state().sharedFileAccess = state().sharedFileAccess.filter(
+      (access) => access.roomId !== roomId || access.fileId !== fileId,
+    );
+    const hasOtherAccess = seedRooms
+      .filter((room) => room.id !== roomId)
+      .some((room) => this.listFiles(room.id).some((file) => file.id === fileId));
+    if (!hasOtherAccess) {
+      state().files = state().files.filter((file) => file.id !== fileId);
+    }
+    return { ok: true };
+  },
+
+  grantFileAccess(roomId: string, fileId: string, accessLevel: FileRecord["accessLevel"] = "read") {
+    state().removedFileAccess = state().removedFileAccess.filter(
+      (access) => access.roomId !== roomId || access.fileId !== fileId,
+    );
+    const existing = state().sharedFileAccess.find((access) => access.roomId === roomId && access.fileId === fileId);
+    if (existing) {
+      existing.accessLevel = accessLevel;
+      return existing;
+    }
+    const access = { roomId, fileId, accessLevel };
+    state().sharedFileAccess.push(access);
+    return access;
+  },
+
   listSharedItems(roomId?: string) {
     return state().sharedItems.filter(
-      (item) => !roomId || item.targetRoomId === roomId || item.sourceRoomId === roomId,
+      (item) => !item.metadata.deletedAt && (!roomId || item.targetRoomId === roomId || item.sourceRoomId === roomId),
     );
   },
 
@@ -549,8 +597,23 @@ export const mockStore = {
     return item;
   },
 
+  deleteSharedItem(sharedItemId: string, deletedBy?: string | null) {
+    const item = state().sharedItems.find((sharedItem) => sharedItem.id === sharedItemId);
+    if (!item) {
+      return null;
+    }
+    item.metadata = {
+      ...item.metadata,
+      deletedAt: now(),
+      deletedBy: deletedBy ?? null,
+    };
+    return item;
+  },
+
   listImports(roomId?: string) {
-    return state().imports.filter((item) => !roomId || item.targetRoomId === roomId || item.meetingRoomId === roomId);
+    return state().imports.filter(
+      (item) => item.status !== "dismissed" && (!roomId || item.targetRoomId === roomId || item.meetingRoomId === roomId),
+    );
   },
 
   createImport(input: Omit<MeetingImport, "id" | "createdAt" | "metadata" | "meetingRoomId" | "status"> & Partial<MeetingImport>) {

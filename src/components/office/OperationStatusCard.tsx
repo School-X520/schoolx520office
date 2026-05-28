@@ -40,7 +40,7 @@ export function OperationStatusCard({ initialStatus }: { initialStatus: Operatio
   }, []);
 
   return (
-    <WarmCard className="office-status-card border-sage/35 bg-gold-soft/70 shadow-md">
+    <WarmCard className="office-status-card motion-continuity-enter border-sage/35 bg-gold-soft/70 shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-2 text-base font-semibold">
@@ -63,7 +63,7 @@ export function OperationStatusCard({ initialStatus }: { initialStatus: Operatio
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="office-metric-card rounded-md border border-line bg-card/80 px-2 py-3 shadow-sm">
+    <div className="office-metric-card motion-context-row rounded-md border border-line bg-card/80 px-2 py-3 shadow-sm">
       <dt className="text-xs font-medium text-ink-soft">{label}</dt>
       <dd className="office-metric-value mt-1 text-2xl font-semibold tabular-nums text-ink">{value}</dd>
     </div>

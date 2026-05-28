@@ -48,14 +48,14 @@ function RoomLink({
   active?: boolean;
 }) {
   const className = cn(
-    "flex items-center justify-between rounded-md px-3 py-2 text-sm transition",
+    "motion-drill-link flex items-center justify-between rounded-md px-3 py-2 text-sm",
     active ? "bg-gold-soft text-ink" : "text-ink-soft hover:bg-card",
     !accessible && "opacity-55",
   );
   const content = (
     <>
       <span className="flex min-w-0 items-center gap-2">
-        <span>{room.icon}</span>
+        <span className="motion-drill-icon">{room.icon}</span>
         <span className="truncate">{room.name}</span>
       </span>
       {!accessible ? <Lock className="size-3.5" /> : null}

@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { ArrowDownToLine, ExternalLink, FolderOpen, X } from "lucide-react";
+import { ArrowDownToLine, ExternalLink, FolderOpen, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/form-controls";
 import { StatusPill } from "@/components/layout/StatusPill";
@@ -20,7 +21,7 @@ export function SharedItemCard({ item }: { item: SharedItem }) {
   const sourceLabel = `${displayRoomName(item.sourceRoomName ?? metadataText(item.metadata.sourceRoomName) ?? item.sourceRoomId)}에서 공유됨`;
 
   return (
-    <article className="rounded-lg border border-bronze/30 bg-gold-soft/55 p-4">
+    <article className="motion-continuity-item rounded-lg border border-bronze/30 bg-gold-soft/55 p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <StatusPill tone="gold">{sourceLabel}</StatusPill>
         <time className="text-xs text-ink-soft">{new Date(item.createdAt).toLocaleString("ko-KR")}</time>
@@ -29,9 +30,62 @@ export function SharedItemCard({ item }: { item: SharedItem }) {
       <p className="mt-1 text-sm text-pretty text-ink-soft">{item.summary}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <OpenOriginalDialog item={item} />
-        <ImportToRoomsDialog item={item} />
+        {item.targetRoomId === "meeting" ? <ImportToRoomsDialog item={item} /> : null}
+        <DeleteSharedItemButton item={item} />
       </div>
     </article>
+  );
+}
+
+function DeleteSharedItemButton({ item }: { item: SharedItem }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function deleteItem() {
+    setError(null);
+    startTransition(async () => {
+      const response = await fetch(`/api/shared-items/${item.id}`, { method: "DELETE" });
+      const payload = (await response.json()) as { error?: string; message?: string };
+      if (!response.ok) {
+        setError(payload.error ?? payload.message ?? "공유 항목을 삭제하지 못했습니다.");
+        return;
+      }
+      setOpen(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <AlertDialog.Root open={open} onOpenChange={setOpen}>
+      <AlertDialog.Trigger asChild>
+        <Button size="sm" variant="secondary" aria-label={`${item.title} 공유 항목 삭제`}>
+          <Trash2 className="size-4" />
+          삭제
+        </Button>
+      </AlertDialog.Trigger>
+      <AlertDialog.Portal>
+        <AlertDialog.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-black/35" />
+        <AlertDialog.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 w-[min(92vw,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-card p-5 shadow-lg">
+          <AlertDialog.Title className="text-base font-semibold text-balance">공유 항목 삭제</AlertDialog.Title>
+          <AlertDialog.Description className="mt-2 text-sm text-pretty text-ink-soft">
+            {item.title} 공유 항목을 목록에서 삭제합니다. 원본 파일 자체는 삭제하지 않습니다.
+          </AlertDialog.Description>
+          {error ? <p className="mt-3 rounded-md border border-terracotta/30 bg-terracotta/10 p-2 text-sm text-terracotta">{error}</p> : null}
+          <div className="mt-5 flex justify-end gap-2">
+            <AlertDialog.Cancel asChild>
+              <Button type="button" variant="secondary" disabled={isPending}>
+                취소
+              </Button>
+            </AlertDialog.Cancel>
+            <Button type="button" variant="danger" disabled={isPending} onClick={deleteItem}>
+              {isPending ? "삭제 중" : "삭제"}
+            </Button>
+          </div>
+        </AlertDialog.Content>
+      </AlertDialog.Portal>
+    </AlertDialog.Root>
   );
 }
 
@@ -69,8 +123,8 @@ function OpenOriginalDialog({ item }: { item: SharedItem }) {
         </Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/35" />
-        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border border-line bg-card p-5 shadow-xl">
+        <DialogPrimitive.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
+        <DialogPrimitive.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border border-line bg-card p-5 shadow-xl">
           <div className="space-y-1 pr-10">
             <DialogPrimitive.Title className="text-lg font-semibold text-balance">원본 파일 열기</DialogPrimitive.Title>
             <DialogPrimitive.Description className="text-sm text-pretty text-ink-soft">
@@ -176,8 +230,8 @@ function ImportToRoomsDialog({ item }: { item: SharedItem }) {
         </Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/35" />
-        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 grid max-h-[min(86dvh,40rem)] w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border border-line bg-card p-5 shadow-xl">
+        <DialogPrimitive.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
+        <DialogPrimitive.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 grid max-h-[min(86dvh,40rem)] w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border border-line bg-card p-5 shadow-xl">
           <div className="space-y-1 pr-10">
             <DialogPrimitive.Title className="text-lg font-semibold text-balance">작업방으로 가져가기</DialogPrimitive.Title>
             <DialogPrimitive.Description className="text-sm text-pretty text-ink-soft">

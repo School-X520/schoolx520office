@@ -16,7 +16,7 @@ export function OfficeFloorPlan({
   const row = (ids: string[]) => ids.map((id) => byId.get(id)).filter(Boolean) as Room[];
 
   return (
-    <div className="office-floor h-full min-h-0">
+    <div className="office-floor motion-continuity-enter h-full min-h-0">
       <div className="office-floor-panel flex h-full min-h-0 flex-col rounded-lg border border-line bg-paper-deep/60 p-4 shadow-sm">
         <div className="office-floor-heading mb-4 flex shrink-0 items-center justify-between gap-3">
           <div>

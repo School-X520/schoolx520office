@@ -139,10 +139,8 @@ export async function deleteRoomFile(input: { userId: string; roomId: string; fi
   if (!file) {
     throw statusError("파일을 찾을 수 없습니다.", 404);
   }
-  if (file.accessLevel === "read") {
-    throw statusError("읽기 전용 파일은 이 방에서 삭제할 수 없습니다.", 403);
-  }
   if (shouldUseMockData()) {
+    mockStore.removeFileFromRoom(input.roomId, input.fileId);
     return file;
   }
 

@@ -33,7 +33,7 @@ export function DecisionTaskPanel({
         </div>
         <ul className="space-y-2">
           {decisions.map((decision) => (
-            <li key={decision.id} className="rounded-md border border-line bg-white/35 p-3 text-sm">
+            <li key={decision.id} className="motion-continuity-item rounded-md border border-line bg-white/35 p-3 text-sm">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-medium text-balance">{decision.title}</p>
@@ -62,7 +62,7 @@ export function DecisionTaskPanel({
         </div>
         <ul className="space-y-2">
           {tasks.map((task) => (
-            <li key={task.id} className="rounded-md border border-line bg-white/35 p-3 text-sm">
+            <li key={task.id} className="motion-continuity-item rounded-md border border-line bg-white/35 p-3 text-sm">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-medium text-balance">{task.title}</p>
@@ -135,8 +135,8 @@ function DecisionDialog({ mode, decision }: { mode: "create" | "edit"; decision?
         )}
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/35" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border border-line bg-card p-5 shadow-xl">
+        <Dialog.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
+        <Dialog.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border border-line bg-card p-5 shadow-xl">
           <div className="space-y-1 pr-10">
             <Dialog.Title className="text-lg font-semibold text-balance">
               {mode === "create" ? "결정사항 추가" : "결정사항 수정"}
@@ -203,8 +203,8 @@ function DeleteDecisionButton({ decision }: { decision: Decision }) {
         </Button>
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="fixed inset-0 z-40 bg-ink/35" />
-        <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-card p-5 shadow-lg">
+        <AlertDialog.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
+        <AlertDialog.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 w-[min(92vw,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-card p-5 shadow-lg">
           <AlertDialog.Title className="text-base font-semibold text-balance">결정사항 삭제</AlertDialog.Title>
           <AlertDialog.Description className="mt-2 text-sm text-pretty text-ink-soft">
             삭제하면 모든 방의 결정사항 목록에서 사라집니다.
@@ -280,8 +280,8 @@ function TaskDialog({ roomId, taskTargetRooms }: { roomId: string; taskTargetRoo
         </Button>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/35" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 grid max-h-[min(86dvh,40rem)] w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border border-line bg-card p-5 shadow-xl">
+        <Dialog.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
+        <Dialog.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 grid max-h-[min(86dvh,40rem)] w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border border-line bg-card p-5 shadow-xl">
           <div className="space-y-1 pr-10">
             <Dialog.Title className="text-lg font-semibold text-balance">할 일 추가</Dialog.Title>
             <Dialog.Description className="text-sm text-pretty text-ink-soft">

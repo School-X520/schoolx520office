@@ -18,14 +18,14 @@ export function RoomCard({
   featured?: boolean;
 }) {
   const className = cn(
-    "office-room-card group relative flex h-full min-h-28 flex-col justify-between overflow-hidden rounded-lg border border-line bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+    "office-room-card motion-drill-card group relative flex h-full min-h-28 flex-col justify-between overflow-hidden rounded-lg border border-line bg-card p-4 shadow-sm hover:shadow-md",
     featured && "min-h-32 border-bronze/50 bg-gold-soft/55",
     !accessible && "opacity-55",
   );
   const content = (
     <>
       <div className="flex items-start justify-between gap-3">
-        <span className="office-room-card-icon text-3xl" role="img" aria-label={room.name}>
+        <span className="office-room-card-icon motion-drill-icon text-3xl" role="img" aria-label={room.name}>
           {room.icon}
         </span>
         {accessible ? (

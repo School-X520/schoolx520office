@@ -1135,7 +1135,9 @@ export const supabaseStore = {
       query = query.or(`source_room_id.eq.${roomId},target_room_id.eq.${roomId}`);
     }
     const { data, error } = await query;
-    return rows(assertOk(data, error)).map(sharedItemFrom);
+    return rows(assertOk(data, error))
+      .map(sharedItemFrom)
+      .filter((item) => !item.metadata.deletedAt);
   },
 
   async createSharedItem(input: CreateSharedItemInput) {
@@ -1156,13 +1158,41 @@ export const supabaseStore = {
     return sharedItemFrom(row(assertOk(data, error))!);
   },
 
+  async deleteSharedItem(sharedItemId: string, deletedBy?: string | null) {
+    const currentResult = await db()
+      .from("shared_items")
+      .select("*")
+      .eq("id", sharedItemId)
+      .maybeSingle();
+    const current = row(assertOk(currentResult.data, currentResult.error));
+    if (!current) {
+      return null;
+    }
+    const currentItem = sharedItemFrom(current);
+    const { data, error } = await db()
+      .from("shared_items")
+      .update({
+        metadata: {
+          ...currentItem.metadata,
+          deletedAt: new Date().toISOString(),
+          deletedBy: deletedBy ?? null,
+        },
+      })
+      .eq("id", sharedItemId)
+      .select("*")
+      .single();
+    return sharedItemFrom(row(assertOk(data, error))!);
+  },
+
   async listImports(roomId?: string) {
     let query = db().from("meeting_imports").select("*").order("created_at", { ascending: false });
     if (roomId) {
       query = query.or(`meeting_room_id.eq.${roomId},target_room_id.eq.${roomId}`);
     }
     const { data, error } = await query;
-    return rows(assertOk(data, error)).map(importFrom);
+    return rows(assertOk(data, error))
+      .map(importFrom)
+      .filter((item) => item.status !== "dismissed");
   },
 
   async createImport(input: CreateImportInput) {

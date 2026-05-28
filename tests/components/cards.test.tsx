@@ -1,9 +1,15 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { FileList } from "@/components/files/FileList";
 import { RoomCard } from "@/components/office/RoomCard";
 import { SharedItemCard } from "@/components/meeting/SharedItemCard";
 import { MeetingImportCard } from "@/components/meeting/MeetingImportCard";
-import type { MeetingImport, Room, SharedItem } from "@/types/domain";
+import type { FileRecord, MeetingImport, Room, SharedItem } from "@/types/domain";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("cards", () => {
   it("renders room card", () => {
@@ -58,5 +64,55 @@ describe("cards", () => {
     expect(screen.getByText("공유")).toBeInTheDocument();
     expect(screen.getByText("재무방에서 공유됨")).toBeInTheDocument();
     expect(screen.getByText("research 반입 항목")).toBeInTheDocument();
+    expect(screen.getByLabelText("공유 공유 항목 삭제")).toBeInTheDocument();
+    expect(screen.getByLabelText("research 반입 항목 반입 항목 삭제")).toBeInTheDocument();
+  });
+
+  it("shares selected files to checked rooms from the file list", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ rooms: [{ id: "research", name: "연구", type: "department", role: "member" }] }))
+      .mockResolvedValueOnce(Response.json({ sharedItems: [{ id: "shared" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const files: FileRecord[] = [
+      {
+        id: "file-1",
+        storagePath: "finance/file.md",
+        originalName: "예산계획안.md",
+        uploadedBy: null,
+        sizeBytes: 2048,
+        mimeType: "text/markdown",
+        checksum: null,
+        createdAt: "2026-05-08T00:00:00Z",
+        versionNo: 1,
+        accessLevel: "owner",
+      },
+    ];
+
+    render(<FileList files={files} roomId="finance" />);
+
+    const shareButton = screen.getByRole("button", { name: /다른 방에 공유하기/ });
+    expect(shareButton).toBeDisabled();
+
+    await userEvent.click(screen.getByLabelText("예산계획안.md 선택"));
+    expect(shareButton).toBeEnabled();
+
+    await userEvent.click(shareButton);
+    await userEvent.click(await screen.findByLabelText("연구방 공유 대상 선택"));
+    await userEvent.click(screen.getByRole("button", { name: "공유하기" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        "/api/files/share",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            sourceRoomId: "finance",
+            sourceFileIds: ["file-1"],
+            targetRoomIds: ["research"],
+          }),
+        }),
+      );
+    });
   });
 });

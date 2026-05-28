@@ -18,7 +18,7 @@ export function RoomWorkspace({ view, user }: { view: RoomViewModel; user: UserP
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="min-w-0 space-y-4">
-        <div className="rounded-lg border border-line bg-card p-4 shadow-sm">
+        <div className="motion-continuity-enter rounded-lg border border-line bg-card p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <Button asChild variant="ghost" size="icon" aria-label="사무실로">
@@ -43,7 +43,7 @@ export function RoomWorkspace({ view, user }: { view: RoomViewModel; user: UserP
           </div>
         </div>
         {isMeeting ? <ActiveVideoMeetingBanner meeting={view.activeMeeting} /> : null}
-        <section className="overflow-hidden rounded-lg border border-line bg-card shadow-sm">
+        <section className="motion-continuity-enter motion-stagger-1 overflow-hidden rounded-lg border border-line bg-card shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
             <div>
               <h2 className="text-base font-semibold text-balance">{isMeeting ? "메인 회의방 채팅" : `${view.room.name} 채팅`}</h2>
@@ -69,10 +69,10 @@ export function RoomWorkspace({ view, user }: { view: RoomViewModel; user: UserP
             imports={view.imports}
           />
         </section>
-        <WarmCard>
+        <WarmCard className="motion-continuity-enter motion-stagger-2">
           <p className="text-sm text-pretty text-ink-soft">{view.room.description}</p>
         </WarmCard>
-        {isMeeting ? <VideoMeetingPanel activeMeeting={view.activeMeeting} /> : null}
+        {isMeeting ? <div className="motion-continuity-enter motion-stagger-3"><VideoMeetingPanel activeMeeting={view.activeMeeting} /></div> : null}
       </section>
       <RoomRightPanel
         roomId={view.room.id}

@@ -3,6 +3,10 @@ import { mockUser } from "@/lib/mock-data";
 import {
   applyMeetingImportToBotMemory,
   createTaskFromMeetingImport,
+  deleteMeetingImport,
+  deleteSharedItem,
+  listFileShareTargetRooms,
+  shareFilesToRooms,
   shareMessageToMeeting,
   importMeetingMessageToRoom,
 } from "@/server/collaboration/share-import-service";
@@ -97,6 +101,68 @@ describe("share/import service", () => {
     expect(mockStore.listTasks("development").map((task) => task.id)).toContain(result.task.id);
     expect(mockStore.getMemory("development")?.pendingContext).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ meetingImportId: meetingImport.id })]),
+    );
+  });
+
+  it("hides deleted shared items and dismissed imports from room lists", async () => {
+    const sharedItem = await shareMessageToMeeting({
+      userId: mockUser.userId,
+      sourceRoomId: "finance",
+      title: "삭제 테스트 공유",
+      summary: "삭제할 공유 항목",
+    });
+    const meetingImport = await importMeetingMessageToRoom({
+      userId: mockUser.userId,
+      targetRoomId: "development",
+      sharedItemId: sharedItem.id,
+    });
+
+    await deleteSharedItem({ userId: mockUser.userId, sharedItemId: sharedItem.id });
+    await deleteMeetingImport({ userId: mockUser.userId, importId: meetingImport.id });
+
+    expect(mockStore.listSharedItems("meeting").map((item) => item.id)).not.toContain(sharedItem.id);
+    expect(mockStore.listImports("development").map((item) => item.id)).not.toContain(meetingImport.id);
+    expect(mockStore.getMemory("development")?.pendingContext).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ meetingImportId: meetingImport.id })]),
+    );
+  });
+
+  it("shares selected files directly to multiple target rooms", async () => {
+    const sourceFile = mockStore.addFile({
+      storagePath: "finance/2026-05/direct-share.md",
+      originalName: "직접공유.md",
+      uploadedBy: mockUser.userId,
+      sizeBytes: 1024,
+      mimeType: "text/markdown",
+    });
+    const targets = await listFileShareTargetRooms({
+      userId: mockUser.userId,
+      sourceRoomId: "finance",
+    });
+
+    expect(targets.map((room) => room.id)).toContain("development");
+    expect(targets.map((room) => room.id)).not.toContain("finance");
+
+    const result = await shareFilesToRooms({
+      userId: mockUser.userId,
+      sourceRoomId: "finance",
+      sourceFileIds: [sourceFile.id],
+      targetRoomIds: ["development", "research"],
+    });
+
+    expect(result.sharedItems).toHaveLength(2);
+    expect(mockStore.listSharedItems("development")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceRoomId: "finance",
+          targetRoomId: "development",
+          sourceFileId: sourceFile.id,
+          title: "직접공유.md",
+        }),
+      ]),
+    );
+    expect(mockStore.listFiles("development")).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: sourceFile.id, accessLevel: "read" })]),
     );
   });
 });

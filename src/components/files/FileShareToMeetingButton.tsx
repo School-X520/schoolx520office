@@ -54,8 +54,8 @@ export function FileShareToMeetingButton({
         </Button>
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="fixed inset-0 z-40 bg-black/35" />
-        <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,28rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-card p-5 shadow-lg">
+        <AlertDialog.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-black/35" />
+        <AlertDialog.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 w-[min(92vw,28rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-card p-5 shadow-lg">
           <AlertDialog.Title className="text-base font-semibold text-balance">메인 회의방에 파일 공유</AlertDialog.Title>
           <AlertDialog.Description className="mt-2 text-sm text-pretty text-ink-soft">
             이 파일이 메인 회의방 파일 목록에 추가되고, 회의방 채팅에 공유 카드가 남습니다.
