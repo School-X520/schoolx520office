@@ -11,7 +11,7 @@ describe("ActiveVideoMeetingBanner", () => {
       provider: "google_meet",
       title: "5월 정기 회의",
       status: "live",
-      joinUrl: "https://meet.google.com/new",
+      joinUrl: "https://meet.google.com/abc-defg-hij",
       hostUrl: null,
       embedAllowed: false,
       consentRecording: false,

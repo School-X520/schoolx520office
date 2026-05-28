@@ -1,7 +1,9 @@
 import { Video } from "lucide-react";
 import { StatusPill } from "@/components/layout/StatusPill";
+import { isRegisteredVideoMeetingJoinUrl } from "@/lib/video-meetings/join-url";
 import { VideoMeetingEndButton } from "@/components/video-meetings/VideoMeetingEndButton";
 import { VideoMeetingJoinButton } from "@/components/video-meetings/VideoMeetingJoinButton";
+import { VideoMeetingJoinUrlForm } from "@/components/video-meetings/VideoMeetingJoinUrlForm";
 import type { VideoMeeting } from "@/types/domain";
 
 export function ActiveVideoMeetingBanner({ meeting }: { meeting?: VideoMeeting | null }) {
@@ -21,11 +23,16 @@ export function ActiveVideoMeetingBanner({ meeting }: { meeting?: VideoMeeting |
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <StatusPill tone="live">진행 중</StatusPill>
-        {meeting.joinUrl ? (
-          <VideoMeetingJoinButton meetingId={meeting.id} joinUrl={meeting.joinUrl} />
+        {isRegisteredVideoMeetingJoinUrl(meeting) ? (
+          <VideoMeetingJoinButton meetingId={meeting.id} joinUrl={meeting.joinUrl ?? ""} />
         ) : null}
         <VideoMeetingEndButton meetingId={meeting.id} />
       </div>
+      {!isRegisteredVideoMeetingJoinUrl(meeting) ? (
+        <div className="basis-full">
+          <VideoMeetingJoinUrlForm meeting={meeting} />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import "server-only";
 
 import { getServerEnv } from "@/lib/env";
-import type { CreateVideoMeetingInput } from "@/types/video-meeting";
 import type { ProviderMeetingResult, VideoMeetingProvider } from "@/lib/video-meetings/provider";
 
 export class GoogleMeetProvider implements VideoMeetingProvider {
@@ -14,28 +13,30 @@ export class GoogleMeetProvider implements VideoMeetingProvider {
     supportsTranscripts: true,
   };
 
-  async createMeeting(input: CreateVideoMeetingInput): Promise<ProviderMeetingResult> {
-    const nickname = `schoolx-${input.roomId}-${crypto.randomUUID().slice(0, 8)}`.toLowerCase();
-    const joinUrl = `https://g.co/meet/${nickname}`;
-
+  async createMeeting(): Promise<ProviderMeetingResult> {
     if (!this.capability.enabled) {
       return {
         providerSpaceName: `mock-spaces/${crypto.randomUUID()}`,
-        providerMeetingCode: nickname,
-        joinUrl,
-        metadata: { mode: "workspace_nickname_link", nickname },
+        providerMeetingCode: null,
+        joinUrl: null,
+        metadata: {
+          mode: "manual_google_meet_link",
+          openUrl: "https://meet.google.com/new",
+          requiresJoinUrlRegistration: true,
+        },
       };
     }
 
     return {
       providerSpaceName: `setup-required/${crypto.randomUUID()}`,
-      providerMeetingCode: nickname,
-      joinUrl,
+      providerMeetingCode: null,
+      joinUrl: null,
       metadata: {
         setupRequired: true,
         docs: "docs/GOOGLE_MEET_SETUP.md",
-        fallbackMode: "workspace_nickname_link",
-        nickname,
+        fallbackMode: "manual_google_meet_link",
+        openUrl: "https://meet.google.com/new",
+        requiresJoinUrlRegistration: true,
       },
     };
   }

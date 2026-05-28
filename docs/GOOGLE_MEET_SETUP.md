@@ -16,5 +16,6 @@ Suggested scopes:
 - `https://www.googleapis.com/auth/meetings.space.created`
 - `https://www.googleapis.com/auth/meetings.space.readonly`
 
-MVP behavior falls back to a Google Meet nickname link (`https://g.co/meet/{nickname}`) until OAuth/token storage is configured.
-Nicknames work for users in the same Google Workspace organization; full API-created Meet spaces still require OAuth/token storage.
+MVP behavior opens `https://meet.google.com/new` and asks the first user to register the actual generated
+`https://meet.google.com/abc-defg-hij` link in SchoolX. Other users then join through the registered link.
+Full API-created Meet spaces still require OAuth/token storage.

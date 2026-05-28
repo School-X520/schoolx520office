@@ -7,6 +7,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { TextArea, TextInput } from "@/components/ui/form-controls";
 import { VideoMeetingProviderPicker } from "@/components/video-meetings/VideoMeetingProviderPicker";
 import { VideoMeetingConsentOptions } from "@/components/video-meetings/VideoMeetingConsentOptions";
+import { getVideoMeetingOpenUrl } from "@/lib/video-meetings/join-url";
 import type { VideoMeeting } from "@/types/domain";
 
 export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
@@ -43,11 +44,12 @@ export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
         return;
       }
       const body = (await response.json()) as { meeting: VideoMeeting };
-      if (body.meeting.joinUrl) {
+      const openUrl = body.meeting.joinUrl ?? getVideoMeetingOpenUrl(body.meeting);
+      if (openUrl) {
         if (meetingWindow) {
-          meetingWindow.location.href = body.meeting.joinUrl;
+          meetingWindow.location.href = openUrl;
         } else {
-          window.open(body.meeting.joinUrl, "_blank", "noopener,noreferrer");
+          window.open(openUrl, "_blank", "noopener,noreferrer");
         }
       } else {
         meetingWindow?.close();

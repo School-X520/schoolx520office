@@ -6,8 +6,10 @@ import { WarmCard } from "@/components/layout/WarmCard";
 import { StatusPill } from "@/components/layout/StatusPill";
 import { Button } from "@/components/ui/button";
 import { isActiveVideoMeeting } from "@/lib/video-meetings/active";
+import { isRegisteredVideoMeetingJoinUrl } from "@/lib/video-meetings/join-url";
 import { VideoMeetingEndButton } from "@/components/video-meetings/VideoMeetingEndButton";
 import { VideoMeetingJoinButton } from "@/components/video-meetings/VideoMeetingJoinButton";
+import { VideoMeetingJoinUrlForm } from "@/components/video-meetings/VideoMeetingJoinUrlForm";
 import { VideoMeetingStartDialog } from "@/components/video-meetings/VideoMeetingStartDialog";
 import type { VideoMeeting } from "@/types/domain";
 
@@ -67,8 +69,8 @@ export function VideoMeetingPanel({
           <p className="line-clamp-1 text-sm font-semibold">{currentMeeting.title}</p>
           <p className="mt-1 text-xs text-ink-soft">{currentMeeting.provider === "google_meet" ? "Google Meet" : "Zoom"}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {currentMeeting.joinUrl ? (
-              <VideoMeetingJoinButton meetingId={currentMeeting.id} joinUrl={currentMeeting.joinUrl} />
+            {isRegisteredVideoMeetingJoinUrl(currentMeeting) ? (
+              <VideoMeetingJoinButton meetingId={currentMeeting.id} joinUrl={currentMeeting.joinUrl ?? ""} />
             ) : null}
             <VideoMeetingEndButton meetingId={currentMeeting.id} onEnded={() => setCurrentMeeting(null)} />
             <Button asChild size="sm" variant="secondary">
@@ -78,6 +80,11 @@ export function VideoMeetingPanel({
               </a>
             </Button>
           </div>
+          {!isRegisteredVideoMeetingJoinUrl(currentMeeting) ? (
+            <div className="mt-3">
+              <VideoMeetingJoinUrlForm meeting={currentMeeting} onRegistered={setCurrentMeeting} />
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="mt-4">

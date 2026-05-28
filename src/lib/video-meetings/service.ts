@@ -2,6 +2,7 @@ import "server-only";
 
 import { shouldUseMockData } from "@/lib/env";
 import { isActiveVideoMeeting } from "@/lib/video-meetings/active";
+import { normalizeGoogleMeetJoinUrl } from "@/lib/video-meetings/join-url";
 import { GoogleMeetProvider } from "@/lib/video-meetings/providers/google-meet";
 import { ZoomProvider } from "@/lib/video-meetings/providers/zoom";
 import type { VideoMeetingProvider } from "@/lib/video-meetings/provider";
@@ -152,6 +153,47 @@ export async function joinVideoMeeting(userId: string, meetingId: string) {
   });
 
   return sanitizeVideoMeetingResponse(currentMeeting ?? meeting);
+}
+
+export async function registerVideoMeetingJoinUrl(userId: string, meetingId: string, inputUrl: string) {
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const meeting = await source.getVideoMeeting(meetingId);
+  if (!meeting) {
+    throw new Error("회의를 찾을 수 없습니다.");
+  }
+  await assertCanCreateVideoMeeting(userId, meeting.roomId);
+
+  const joinUrl = normalizeGoogleMeetJoinUrl(inputUrl);
+  if (!joinUrl) {
+    throw new Error("Google Meet 주소는 https://meet.google.com/abc-defg-hij 형식이어야 합니다.");
+  }
+
+  const registeredAt = new Date().toISOString();
+  const updated = await source.updateVideoMeeting(meeting.id, {
+    joinUrl,
+    metadata: {
+      ...meeting.metadata,
+      requiresJoinUrlRegistration: false,
+      joinUrlRegisteredBy: userId,
+      joinUrlRegisteredAt: registeredAt,
+    },
+  });
+  await source.addVideoEvent({
+    videoMeetingId: meeting.id,
+    roomId: meeting.roomId,
+    eventType: "join_url_registered",
+    actorUserId: userId,
+    payload: { joinUrl },
+  });
+  await auditVideoMeeting({
+    userId,
+    roomId: meeting.roomId,
+    action: "video_meeting.join_url_registered",
+    meetingId: meeting.id,
+    metadata: { joinUrlRegisteredAt: registeredAt },
+  });
+
+  return sanitizeVideoMeetingResponse(updated ?? meeting);
 }
 
 export async function listVideoMeetings(userId: string, roomId: string, status?: string | null) {
