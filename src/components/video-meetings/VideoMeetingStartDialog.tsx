@@ -7,7 +7,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { TextArea, TextInput } from "@/components/ui/form-controls";
 import { VideoMeetingProviderPicker } from "@/components/video-meetings/VideoMeetingProviderPicker";
 import { VideoMeetingConsentOptions } from "@/components/video-meetings/VideoMeetingConsentOptions";
-import { getVideoMeetingOpenUrl } from "@/lib/video-meetings/join-url";
+import { getVideoMeetingOpenUrl, isRegisteredVideoMeetingJoinUrl } from "@/lib/video-meetings/join-url";
 import type { VideoMeeting } from "@/types/domain";
 
 export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
@@ -53,6 +53,11 @@ export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
         }
       } else {
         meetingWindow?.close();
+      }
+      if (!isRegisteredVideoMeetingJoinUrl(body.meeting)) {
+        window.alert(
+          "Google Meet 창에서 실제 회의 주소를 복사한 뒤 SchoolX 화상회의 카드의 링크 등록 칸에 붙여넣어 주세요. 등록 후 다른 사용자가 같은 회의에 참가할 수 있습니다.",
+        );
       }
       window.location.href = "/rooms/meeting";
     });

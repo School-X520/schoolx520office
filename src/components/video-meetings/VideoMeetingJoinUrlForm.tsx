@@ -58,14 +58,21 @@ export function VideoMeetingJoinUrlForm({
           Google Meet 새 회의 열기
         </a>
       </Button>
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
         <TextInput
           value={joinUrl}
           onChange={(event) => setJoinUrl(event.target.value)}
           placeholder="https://meet.google.com/abc-defg-hij"
           aria-label="Google Meet 링크"
+          className="min-w-0"
         />
-        <Button type="button" size="sm" onClick={registerJoinUrl} disabled={isPending || !joinUrl.trim()}>
+        <Button
+          type="button"
+          size="md"
+          onClick={registerJoinUrl}
+          disabled={isPending || !joinUrl.trim()}
+          className="w-full whitespace-nowrap"
+        >
           <Link2 className="size-4" />
           {isPending ? "등록 중" : "링크 등록"}
         </Button>
