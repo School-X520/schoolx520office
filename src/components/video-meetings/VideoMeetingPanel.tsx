@@ -1,7 +1,11 @@
-import { Video, FileText } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { FileText, Video } from "lucide-react";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { StatusPill } from "@/components/layout/StatusPill";
 import { Button } from "@/components/ui/button";
+import { VideoMeetingJoinButton } from "@/components/video-meetings/VideoMeetingJoinButton";
 import { VideoMeetingStartDialog } from "@/components/video-meetings/VideoMeetingStartDialog";
 import type { VideoMeeting } from "@/types/domain";
 
@@ -12,6 +16,36 @@ export function VideoMeetingPanel({
   activeMeeting?: VideoMeeting | null;
   compact?: boolean;
 }) {
+  const [currentMeeting, setCurrentMeeting] = useState<VideoMeeting | null>(activeMeeting ?? null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function refreshActiveMeeting() {
+      try {
+        const response = await fetch("/api/video-meetings?roomId=meeting", { cache: "no-store" });
+        if (!response.ok) {
+          return;
+        }
+        const body = (await response.json()) as { meetings?: VideoMeeting[] };
+        const meeting =
+          body.meetings?.find((item) => item.status === "live" || item.status === "scheduled") ?? null;
+        if (isMounted) {
+          setCurrentMeeting(meeting);
+        }
+      } catch {
+        return;
+      }
+    }
+
+    const interval = window.setInterval(refreshActiveMeeting, 15000);
+    void refreshActiveMeeting();
+    return () => {
+      isMounted = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
   return (
     <WarmCard className="office-side-card office-video-card">
       <div className="flex items-start justify-between gap-3">
@@ -21,28 +55,24 @@ export function VideoMeetingPanel({
             화상회의
           </p>
           <p className="office-video-copy mt-1 text-sm text-pretty text-ink-soft">
-            Google Meet 링크형을 기본으로 회의 결과물을 회의방에 남깁니다.
+            진행 중인 회의가 있으면 새로 만들지 않고 같은 회의로 참가합니다.
           </p>
         </div>
-        {activeMeeting ? <StatusPill tone="live">{activeMeeting.status}</StatusPill> : null}
+        {currentMeeting ? <StatusPill tone="live">진행 중</StatusPill> : null}
       </div>
-      {activeMeeting ? (
+      {currentMeeting ? (
         <div className="mt-4 rounded-md border border-sage/25 bg-sage/10 p-3">
-          <p className="line-clamp-1 text-sm font-semibold">{activeMeeting.title}</p>
-          <p className="mt-1 text-xs text-ink-soft">{activeMeeting.provider === "google_meet" ? "Google Meet" : "Zoom"}</p>
+          <p className="text-xs font-semibold text-sage">현재 화상회의 진행 중</p>
+          <p className="line-clamp-1 text-sm font-semibold">{currentMeeting.title}</p>
+          <p className="mt-1 text-xs text-ink-soft">{currentMeeting.provider === "google_meet" ? "Google Meet" : "Zoom"}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {activeMeeting.joinUrl ? (
-              <Button asChild size="sm">
-                <a href={activeMeeting.joinUrl} target="_blank" rel="noreferrer">
-                  <Video className="size-4" />
-                  회의 입장
-                </a>
-              </Button>
+            {currentMeeting.joinUrl ? (
+              <VideoMeetingJoinButton meetingId={currentMeeting.id} joinUrl={currentMeeting.joinUrl} />
             ) : null}
             <Button asChild size="sm" variant="secondary">
-              <a href={`/rooms/${activeMeeting.roomId}`}>
+              <a href={`/rooms/${currentMeeting.roomId}`}>
                 <FileText className="size-4" />
-                회의록 보기
+                회의방 보기
               </a>
             </Button>
           </div>

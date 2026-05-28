@@ -1,6 +1,6 @@
 import { Video } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/layout/StatusPill";
+import { VideoMeetingJoinButton } from "@/components/video-meetings/VideoMeetingJoinButton";
 import type { VideoMeeting } from "@/types/domain";
 
 export function ActiveVideoMeetingBanner({ meeting }: { meeting?: VideoMeeting | null }) {
@@ -19,13 +19,9 @@ export function ActiveVideoMeetingBanner({ meeting }: { meeting?: VideoMeeting |
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <StatusPill tone="live">{meeting.status}</StatusPill>
+        <StatusPill tone="live">진행 중</StatusPill>
         {meeting.joinUrl ? (
-          <Button asChild size="sm">
-            <a href={meeting.joinUrl} target="_blank" rel="noreferrer">
-              회의 입장
-            </a>
-          </Button>
+          <VideoMeetingJoinButton meetingId={meeting.id} joinUrl={meeting.joinUrl} />
         ) : null}
       </div>
     </div>

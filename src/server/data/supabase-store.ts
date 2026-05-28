@@ -1494,6 +1494,7 @@ export const supabaseStore = {
       .from("video_meetings")
       .update({
         status: patch.status,
+        started_at: patch.startedAt,
         ended_at: patch.endedAt,
         ended_by: patch.endedBy,
         metadata: patch.metadata,

@@ -27,7 +27,7 @@ export default async function OfficePage() {
     source.listSharedItems("meeting"),
     getOperationStatus(user.userId),
   ]);
-  const activeMeeting = videoMeetings.find((meeting) => meeting.status !== "ended") ?? null;
+  const activeMeeting = videoMeetings.find((meeting) => meeting.status === "live" || meeting.status === "scheduled") ?? null;
 
   return (
     <AppShell

@@ -23,5 +23,6 @@ describe("ActiveVideoMeetingBanner", () => {
     };
     render(<ActiveVideoMeetingBanner meeting={meeting} />);
     expect(screen.getByText("지금 메인 화상회의가 진행 중입니다.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /회의 참가/ })).toBeInTheDocument();
   });
 });

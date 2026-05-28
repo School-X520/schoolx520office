@@ -7,6 +7,7 @@ export async function auditVideoMeeting(input: {
   roomId: string;
   action:
     | "video_meeting.created"
+    | "video_meeting.joined_intent"
     | "video_meeting.ended"
     | "video_meeting.artifact_created"
     | "video_meeting.consent_changed";

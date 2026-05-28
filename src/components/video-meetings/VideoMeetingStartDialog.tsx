@@ -7,6 +7,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { TextArea, TextInput } from "@/components/ui/form-controls";
 import { VideoMeetingProviderPicker } from "@/components/video-meetings/VideoMeetingProviderPicker";
 import { VideoMeetingConsentOptions } from "@/components/video-meetings/VideoMeetingConsentOptions";
+import type { VideoMeeting } from "@/types/domain";
 
 export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
   const [title, setTitle] = useState("5월 정기 회의");
@@ -20,6 +21,7 @@ export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
 
   function createMeeting() {
     setError(null);
+    const meetingWindow = window.open("about:blank", "_blank", "noopener,noreferrer");
     startTransition(async () => {
       const response = await fetch("/api/video-meetings", {
         method: "POST",
@@ -36,8 +38,19 @@ export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
       });
       if (!response.ok) {
         const body = (await response.json()) as { error?: string };
+        meetingWindow?.close();
         setError(body.error ?? "회의 생성에 실패했습니다.");
         return;
+      }
+      const body = (await response.json()) as { meeting: VideoMeeting };
+      if (body.meeting.joinUrl) {
+        if (meetingWindow) {
+          meetingWindow.location.href = body.meeting.joinUrl;
+        } else {
+          window.open(body.meeting.joinUrl, "_blank", "noopener,noreferrer");
+        }
+      } else {
+        meetingWindow?.close();
       }
       window.location.href = "/rooms/meeting";
     });
@@ -74,7 +87,7 @@ export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
         />
         {error ? <p className="rounded-md border border-terracotta/35 bg-terracotta/10 p-3 text-sm text-terracotta">{error}</p> : null}
         <Button disabled={isPending || !title.trim()} onClick={createMeeting} className="w-full">
-          {isPending ? "생성 중" : "회의 만들기"}
+          {isPending ? "시작 중" : "회의 시작"}
         </Button>
       </div>
     </Dialog>

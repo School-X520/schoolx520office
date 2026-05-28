@@ -14,6 +14,7 @@ import {
 import { runAgent } from "@/server/agents/run-agent";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
+import type { VideoMeeting } from "@/types/domain";
 import type { CreateVideoMeetingInput } from "@/types/video-meeting";
 
 function providerFor(id: string): VideoMeetingProvider {
@@ -23,13 +24,46 @@ function providerFor(id: string): VideoMeetingProvider {
   return new GoogleMeetProvider();
 }
 
+type VideoMeetingSource = typeof mockStore | typeof supabaseStore;
+
+function isOpenVideoMeeting(meeting: VideoMeeting) {
+  return meeting.status === "scheduled" || meeting.status === "live";
+}
+
+async function getOpenVideoMeeting(source: VideoMeetingSource, roomId: string) {
+  const meetings = await source.listVideoMeetings(roomId);
+  return meetings.find(isOpenVideoMeeting) ?? null;
+}
+
 export async function createVideoMeeting(userId: string, input: CreateVideoMeetingInput) {
   await assertCanCreateVideoMeeting(userId, input.roomId);
   const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const openMeeting = await getOpenVideoMeeting(source, input.roomId);
+  if (openMeeting) {
+    await source.addVideoEvent({
+      videoMeetingId: openMeeting.id,
+      roomId: openMeeting.roomId,
+      eventType: "joined_intent",
+      actorUserId: userId,
+      payload: { reusedExistingMeeting: true },
+    });
+    await auditVideoMeeting({
+      userId,
+      roomId: openMeeting.roomId,
+      action: "video_meeting.joined_intent",
+      meetingId: openMeeting.id,
+      metadata: { reusedExistingMeeting: true },
+    });
+    return sanitizeVideoMeetingResponse(openMeeting);
+  }
+
   const provider = providerFor(input.provider);
   const result = await provider.createMeeting(input);
+  const startedAt = new Date().toISOString();
   const meeting = await source.createVideoMeeting({
     ...input,
+    status: "live",
+    startedAt,
     createdBy: userId,
     providerSpaceName: result.providerSpaceName ?? null,
     providerConferenceName: result.providerConferenceName ?? null,
@@ -38,7 +72,12 @@ export async function createVideoMeeting(userId: string, input: CreateVideoMeeti
     joinUrl: result.joinUrl ?? null,
     hostUrl: result.hostUrl ?? null,
     embedAllowed: result.embedAllowed ?? false,
-    metadata: result.metadata ?? {},
+    metadata: {
+      ...(result.metadata ?? {}),
+      firstOpenedBy: userId,
+      firstOpenedAt: startedAt,
+      activeJoinFlow: true,
+    },
   });
 
   await source.addVideoEvent({
@@ -48,11 +87,18 @@ export async function createVideoMeeting(userId: string, input: CreateVideoMeeti
     actorUserId: userId,
     payload: { provider: input.provider },
   });
+  await source.addVideoEvent({
+    videoMeetingId: meeting.id,
+    roomId: input.roomId,
+    eventType: "live",
+    actorUserId: userId,
+    payload: { provider: input.provider },
+  });
 
   await source.createMessage({
     roomId: input.roomId,
     type: "video_meeting",
-    content: `${input.title} 화상회의가 준비되었습니다.`,
+    content: `${input.title} 화상회의가 시작되었습니다. 대시보드에서 회의 참가 버튼으로 들어갈 수 있습니다.`,
     senderUserId: userId,
     metadata: { videoMeetingId: meeting.id, provider: input.provider },
   });
@@ -70,6 +116,45 @@ export async function createVideoMeeting(userId: string, input: CreateVideoMeeti
   });
 
   return sanitizeVideoMeetingResponse(meeting);
+}
+
+export async function joinVideoMeeting(userId: string, meetingId: string) {
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const meeting = await source.getVideoMeeting(meetingId);
+  if (!meeting) {
+    throw new Error("회의를 찾을 수 없습니다.");
+  }
+  await assertRoomMember(userId, meeting.roomId);
+
+  const joinedAt = new Date().toISOString();
+  const currentMeeting =
+    meeting.status === "scheduled"
+      ? await source.updateVideoMeeting(meeting.id, {
+          status: "live",
+          startedAt: meeting.startedAt ?? joinedAt,
+          metadata: {
+            ...meeting.metadata,
+            firstJoinedAt: meeting.startedAt ?? joinedAt,
+          },
+        })
+      : meeting;
+
+  await source.addVideoEvent({
+    videoMeetingId: meeting.id,
+    roomId: meeting.roomId,
+    eventType: "joined_intent",
+    actorUserId: userId,
+    payload: { joinUrlPresent: Boolean(currentMeeting?.joinUrl) },
+  });
+  await auditVideoMeeting({
+    userId,
+    roomId: meeting.roomId,
+    action: "video_meeting.joined_intent",
+    meetingId: meeting.id,
+    metadata: { joinUrlPresent: Boolean(currentMeeting?.joinUrl) },
+  });
+
+  return sanitizeVideoMeetingResponse(currentMeeting ?? meeting);
 }
 
 export async function listVideoMeetings(userId: string, roomId: string, status?: string | null) {
