@@ -231,14 +231,17 @@ function ImportToRoomsDialog({ item }: { item: SharedItem }) {
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
-        <DialogPrimitive.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 grid max-h-[min(86dvh,40rem)] w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border border-line bg-card p-5 shadow-xl">
+        <DialogPrimitive.Content
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          className="motion-context-dialog fixed left-1/2 top-[50dvh] z-50 grid max-h-[min(calc(100dvh-2rem),40rem)] w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-4 overflow-hidden rounded-lg border border-line bg-card p-5 shadow-xl"
+        >
           <div className="space-y-1 pr-10">
             <DialogPrimitive.Title className="text-lg font-semibold text-balance">작업방으로 가져가기</DialogPrimitive.Title>
             <DialogPrimitive.Description className="text-sm text-pretty text-ink-soft">
               선택한 작업방으로 파일을 복사하고 반입 기록을 남깁니다.
             </DialogPrimitive.Description>
           </div>
-          <div className="space-y-2">
+          <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
             {rooms.map((room) => (
               <label key={room.id} className="flex cursor-pointer items-center gap-3 rounded-md border border-line bg-white/45 p-3 text-sm">
                 <input
@@ -246,6 +249,7 @@ function ImportToRoomsDialog({ item }: { item: SharedItem }) {
                   checked={selectedRoomIds.includes(room.id)}
                   onChange={() => toggleRoom(room.id)}
                   className="size-4 accent-sage"
+                  aria-label={`${displayRoomName(room.name)} 가져가기 대상 선택`}
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block font-medium">{displayRoomName(room.name)}</span>
