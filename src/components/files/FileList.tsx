@@ -163,7 +163,10 @@ function FileShareToRoomsDialog({
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
-        <DialogPrimitive.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 grid max-h-[min(86dvh,40rem)] w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border border-line bg-card p-5 shadow-xl">
+        <DialogPrimitive.Content
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          className="motion-context-dialog fixed left-1/2 top-[50dvh] z-50 grid max-h-[min(calc(100dvh-2rem),40rem)] w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 grid-rows-[auto_auto_minmax(0,1fr)_auto_auto] gap-4 overflow-hidden rounded-lg border border-line bg-card p-5 shadow-xl"
+        >
           <div className="space-y-1 pr-10">
             <DialogPrimitive.Title className="text-lg font-semibold text-balance">다른 방에 파일 공유</DialogPrimitive.Title>
             <DialogPrimitive.Description className="text-sm text-pretty text-ink-soft">
@@ -180,7 +183,7 @@ function FileShareToRoomsDialog({
               ))}
             </ul>
           </div>
-          <div className="space-y-2">
+          <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
             {rooms.map((room) => (
               <label key={room.id} className="flex cursor-pointer items-center gap-3 rounded-md border border-line bg-white/45 p-3 text-sm">
                 <input
