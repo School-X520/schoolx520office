@@ -1,5 +1,6 @@
 import { Video } from "lucide-react";
 import { StatusPill } from "@/components/layout/StatusPill";
+import { VideoMeetingEndButton } from "@/components/video-meetings/VideoMeetingEndButton";
 import { VideoMeetingJoinButton } from "@/components/video-meetings/VideoMeetingJoinButton";
 import type { VideoMeeting } from "@/types/domain";
 
@@ -23,6 +24,7 @@ export function ActiveVideoMeetingBanner({ meeting }: { meeting?: VideoMeeting |
         {meeting.joinUrl ? (
           <VideoMeetingJoinButton meetingId={meeting.id} joinUrl={meeting.joinUrl} />
         ) : null}
+        <VideoMeetingEndButton meetingId={meeting.id} />
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { shouldUseMockData } from "@/lib/env";
+import { isActiveVideoMeeting } from "@/lib/video-meetings/active";
 import { GoogleMeetProvider } from "@/lib/video-meetings/providers/google-meet";
 import { ZoomProvider } from "@/lib/video-meetings/providers/zoom";
 import type { VideoMeetingProvider } from "@/lib/video-meetings/provider";
@@ -26,13 +27,9 @@ function providerFor(id: string): VideoMeetingProvider {
 
 type VideoMeetingSource = typeof mockStore | typeof supabaseStore;
 
-function isOpenVideoMeeting(meeting: VideoMeeting) {
-  return meeting.status === "scheduled" || meeting.status === "live";
-}
-
 async function getOpenVideoMeeting(source: VideoMeetingSource, roomId: string) {
   const meetings = await source.listVideoMeetings(roomId);
-  return meetings.find(isOpenVideoMeeting) ?? null;
+  return meetings.find((meeting: VideoMeeting) => isActiveVideoMeeting(meeting)) ?? null;
 }
 
 export async function createVideoMeeting(userId: string, input: CreateVideoMeetingInput) {

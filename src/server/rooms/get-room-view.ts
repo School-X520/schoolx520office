@@ -6,6 +6,7 @@ import { supabaseStore } from "@/server/data/supabase-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
 import { isDevelopmentAgent } from "@/lib/agents/development-agent";
+import { isActiveVideoMeeting } from "@/lib/video-meetings/active";
 
 export async function getOfficeView(userId: string) {
   const source = shouldUseMockData() ? mockStore : supabaseStore;
@@ -66,7 +67,7 @@ export async function getRoomView(userId: string, roomId: string, options: { thr
       : developmentAgent && developmentAgent.id !== residentAgent?.id
         ? [developmentAgent]
         : [];
-  const activeMeeting = videoMeetings.find((meeting) => meeting.status === "live" || meeting.status === "scheduled") ?? null;
+  const activeMeeting = videoMeetings.find((meeting) => isActiveVideoMeeting(meeting)) ?? null;
   const roomNameById = new Map(allRooms.map((item) => [item.id, item.name]));
   const sharedItemsWithRoomNames = sharedItems.map((item) => ({
     ...item,

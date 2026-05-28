@@ -5,6 +5,8 @@ import { FileText, Video } from "lucide-react";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { StatusPill } from "@/components/layout/StatusPill";
 import { Button } from "@/components/ui/button";
+import { isActiveVideoMeeting } from "@/lib/video-meetings/active";
+import { VideoMeetingEndButton } from "@/components/video-meetings/VideoMeetingEndButton";
 import { VideoMeetingJoinButton } from "@/components/video-meetings/VideoMeetingJoinButton";
 import { VideoMeetingStartDialog } from "@/components/video-meetings/VideoMeetingStartDialog";
 import type { VideoMeeting } from "@/types/domain";
@@ -28,8 +30,7 @@ export function VideoMeetingPanel({
           return;
         }
         const body = (await response.json()) as { meetings?: VideoMeeting[] };
-        const meeting =
-          body.meetings?.find((item) => item.status === "live" || item.status === "scheduled") ?? null;
+        const meeting = body.meetings?.find((item) => isActiveVideoMeeting(item)) ?? null;
         if (isMounted) {
           setCurrentMeeting(meeting);
         }
@@ -69,6 +70,7 @@ export function VideoMeetingPanel({
             {currentMeeting.joinUrl ? (
               <VideoMeetingJoinButton meetingId={currentMeeting.id} joinUrl={currentMeeting.joinUrl} />
             ) : null}
+            <VideoMeetingEndButton meetingId={currentMeeting.id} onEnded={() => setCurrentMeeting(null)} />
             <Button asChild size="sm" variant="secondary">
               <a href={`/rooms/${currentMeeting.roomId}`}>
                 <FileText className="size-4" />

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mockUser } from "@/lib/mock-data";
+import { isActiveVideoMeeting, VIDEO_MEETING_ACTIVE_WINDOW_HOURS } from "@/lib/video-meetings/active";
 import { createVideoMeeting, joinVideoMeeting } from "@/lib/video-meetings/service";
 import { mockStore } from "@/server/data/mock-store";
 
@@ -57,5 +58,33 @@ describe("video meeting service", () => {
     expect(joined.id).toBe(meeting.id);
     expect(joined.joinUrl).toBe(meeting.joinUrl);
     expect(mockStore.listVideoEvents(meeting.id).map((event) => event.eventType)).toContain("joined_intent");
+  });
+
+  it("does not treat old live meetings as active", () => {
+    const nowMs = Date.parse("2026-05-28T12:00:00.000Z");
+    const staleStartedAt = new Date(nowMs - (VIDEO_MEETING_ACTIVE_WINDOW_HOURS + 1) * 60 * 60 * 1000).toISOString();
+
+    expect(
+      isActiveVideoMeeting(
+        {
+          id: "old-meeting",
+          roomId: "meeting",
+          provider: "google_meet",
+          title: "오래된 회의",
+          status: "live",
+          joinUrl: "https://g.co/meet/schoolx-meeting-old",
+          hostUrl: null,
+          embedAllowed: false,
+          startedAt: staleStartedAt,
+          consentRecording: false,
+          consentTranscript: false,
+          consentAiSummary: true,
+          metadata: {},
+          createdAt: staleStartedAt,
+          updatedAt: staleStartedAt,
+        },
+        nowMs,
+      ),
+    ).toBe(false);
   });
 });

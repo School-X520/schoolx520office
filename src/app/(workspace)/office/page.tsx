@@ -2,6 +2,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { MeetingSidePanel } from "@/components/office/MeetingSidePanel";
 import { OfficeFloorPlan } from "@/components/office/OfficeFloorPlan";
 import { shouldUseMockData } from "@/lib/env";
+import { isActiveVideoMeeting } from "@/lib/video-meetings/active";
 import { AuthError } from "@/server/auth/errors";
 import { requireUser } from "@/server/auth/require-user";
 import { redirectToLogin } from "@/server/auth/redirect-to-login";
@@ -27,7 +28,7 @@ export default async function OfficePage() {
     source.listSharedItems("meeting"),
     getOperationStatus(user.userId),
   ]);
-  const activeMeeting = videoMeetings.find((meeting) => meeting.status === "live" || meeting.status === "scheduled") ?? null;
+  const activeMeeting = videoMeetings.find((meeting) => isActiveVideoMeeting(meeting)) ?? null;
 
   return (
     <AppShell
