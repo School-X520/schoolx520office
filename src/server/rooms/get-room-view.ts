@@ -5,7 +5,7 @@ import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
-import { isDevelopmentAgent } from "@/lib/agents/development-agent";
+import { getCoordinatorAgent, isDevelopmentAgent } from "@/lib/agents/development-agent";
 import { isActiveVideoMeeting } from "@/lib/video-meetings/active";
 
 export async function getOfficeView(userId: string) {
@@ -61,9 +61,10 @@ export async function getRoomView(userId: string, roomId: string, options: { thr
     source.listTasks(roomId),
   ]);
   const developmentAgent = agents.find(isDevelopmentAgent);
+  const coordinatorAgent = getCoordinatorAgent();
   const guestAgents =
     roomId === "meeting"
-      ? agents.filter((agent) => writableRoomIds.has(agent.roomId))
+      ? [coordinatorAgent, ...agents.filter((agent) => writableRoomIds.has(agent.roomId))]
       : developmentAgent && developmentAgent.id !== residentAgent?.id
         ? [developmentAgent]
         : [];

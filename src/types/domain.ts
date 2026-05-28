@@ -37,6 +37,40 @@ export type OperationStatusSnapshot = {
   updatedAt: string;
 };
 
+export type RoomBriefingStatus = "draft" | "ready" | "archived";
+
+export type RoomBriefing = {
+  id: string;
+  roomId: string;
+  agentId?: string | null;
+  periodStart: string;
+  periodEnd: string;
+  summary: string;
+  risks: JsonObject[];
+  nextActions: JsonObject[];
+  blockedItems: JsonObject[];
+  sourceCounts: JsonObject;
+  status: RoomBriefingStatus;
+  createdBy?: string | null;
+  createdAt: string;
+  metadata: JsonObject;
+};
+
+export type CoordinatorBriefing = {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  summary: string;
+  roomHighlights: JsonObject[];
+  crossRoomRisks: JsonObject[];
+  decisionsNeeded: JsonObject[];
+  nextActions: JsonObject[];
+  sourceRoomBriefingIds: string[];
+  createdBy?: string | null;
+  createdAt: string;
+  metadata: JsonObject;
+};
+
 export type Room = {
   id: string;
   name: string;

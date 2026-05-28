@@ -14,8 +14,9 @@ import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { requireRoomMember } from "@/server/auth/require-room-member";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
-import { isDevelopmentAgent } from "@/lib/agents/development-agent";
-import type { AgentRun, AgentRunMode, AgentRunType, RoomMessage } from "@/types/domain";
+import { getCoordinatorAgent, isCoordinatorAgent, isDevelopmentAgent } from "@/lib/agents/development-agent";
+import { generateCoordinatorBriefing } from "@/server/coordinator/coordinator-briefing-service";
+import type { AgentRun, AgentRunMode, AgentRunType, CoordinatorBriefing, RoomBriefing, RoomMessage } from "@/types/domain";
 
 type RunAgentInput = {
   userId: string;
@@ -92,13 +93,20 @@ export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentR
   const run = await source.createAgentRun({
     roomId: input.roomId,
     threadId: thread.id,
-    agentId: agent.id,
+    agentId: isCoordinatorAgent(agent) ? null : agent.id,
     initiatedBy: input.userId,
     mode,
     runType: input.runType ?? (mode === "meeting_guest" ? "meeting_guest" : "room_agent"),
     guestSourceRoomId,
     inputMessageId: inputMessage.id,
     status: "queued",
+    metadata: isCoordinatorAgent(agent)
+      ? {
+          coordinatorAgentId: agent.id,
+          guestLabel: agent.name,
+          coordinatorPm: true,
+        }
+      : {},
   });
 
   return {
@@ -126,7 +134,7 @@ export async function completeAgentRun(job: AgentRunJob) {
 
   await source.addAuditLog({
     actorUserId: job.userId,
-    actorAgentId: job.agentId,
+    actorAgentId: auditActorAgentId(job.agentId),
     roomId: job.roomId,
     action: "agent.run.started",
     targetType: "agent_run",
@@ -134,6 +142,11 @@ export async function completeAgentRun(job: AgentRunJob) {
   });
 
   try {
+    const agent = await source.getAgent(job.agentId);
+    if (isCoordinatorAgent(agent)) {
+      return completeCoordinatorAgentRun(job);
+    }
+
     const adapter = getAgentAdapter();
     const startupContext = await getRunStartupContext(job);
     const memoryAttachments = await getRunMemoryAttachments(job);
@@ -184,7 +197,7 @@ export async function completeAgentRun(job: AgentRunJob) {
 
     await source.addAuditLog({
       actorUserId: job.userId,
-      actorAgentId: job.agentId,
+      actorAgentId: auditActorAgentId(job.agentId),
       roomId: job.roomId,
       action: "agent.run.completed",
       targetType: "agent_run",
@@ -201,7 +214,7 @@ export async function completeAgentRun(job: AgentRunJob) {
     });
     await source.addAuditLog({
       actorUserId: job.userId,
-      actorAgentId: job.agentId,
+      actorAgentId: auditActorAgentId(job.agentId),
       roomId: job.roomId,
       action: "agent.run.failed",
       targetType: "agent_run",
@@ -210,6 +223,122 @@ export async function completeAgentRun(job: AgentRunJob) {
     });
     throw error;
   }
+}
+
+async function completeCoordinatorAgentRun(job: AgentRunJob) {
+  if (job.roomId !== "meeting") {
+    throw new Error("총괄봇은 메인 회의방에서만 호출할 수 있습니다.");
+  }
+  const source = getSource();
+  const snapshot = await generateCoordinatorBriefing({ userId: job.userId });
+  const coordinatorAgent = getCoordinatorAgent();
+  const content = formatCoordinatorBriefingMessage(snapshot.briefing, snapshot.roomBriefings);
+
+  const outputMessage = await source.createMessage({
+    roomId: job.roomId,
+    threadId: job.threadId,
+    type: "guest_agent",
+    content,
+    senderUserId: null,
+    senderAgentId: null,
+    agentRunId: job.runId,
+    metadata: {
+      guestLabel: coordinatorAgent.name,
+      coordinatorAgentId: coordinatorAgent.id,
+      coordinatorBriefingId: snapshot.briefing?.id ?? null,
+      sourceRoomBriefingIds: snapshot.roomBriefings.map((briefing) => briefing.id),
+    },
+  });
+
+  const completedRun = await source.updateAgentRun(job.runId, {
+    status: "completed",
+    outputMessageId: outputMessage.id,
+    sessionSummary: snapshot.briefing?.summary ?? null,
+    tokenUsage: {
+      mode: "coordinator",
+      roomBriefingCount: snapshot.roomBriefings.length,
+      outputChars: content.length,
+    },
+    endedAt: new Date().toISOString(),
+  });
+
+  await source.addAuditLog({
+    actorUserId: job.userId,
+    roomId: job.roomId,
+    action: "coordinator_agent.run.completed",
+    targetType: "agent_run",
+    targetId: job.runId,
+    metadata: {
+      coordinatorBriefingId: snapshot.briefing?.id ?? null,
+      roomBriefingIds: snapshot.roomBriefings.map((briefing) => briefing.id),
+    },
+  });
+
+  return { run: completedRun, outputMessage };
+}
+
+function formatCoordinatorBriefingMessage(briefing: CoordinatorBriefing | null, roomBriefings: RoomBriefing[]) {
+  if (!briefing) {
+    return "총괄 브리핑을 만들 수 없습니다. 방별 보고 데이터가 아직 없습니다.";
+  }
+
+  const highlights = briefing.roomHighlights
+    .slice(0, 8)
+    .map((item) => {
+      const roomName = textValue(item.roomName, textValue(item.roomId, "업무방"));
+      const taskCount = numberValue(item.taskCount);
+      const riskCount = numberValue(item.riskCount);
+      const summary = textValue(item.summary, "요약 대기 중");
+      return `- ${roomName}: 할 일 ${taskCount}개, 위험 ${riskCount}개. ${summary}`;
+    })
+    .join("\n");
+  const risks = briefing.crossRoomRisks.length
+    ? briefing.crossRoomRisks
+        .slice(0, 5)
+        .map((item) => `- ${textValue(item.roomName, "업무방")}: ${textValue(item.title, textValue(item.type, "위험 신호"))}`)
+        .join("\n")
+    : "- 현재 구조화 보고 기준의 공통 위험 신호는 없습니다.";
+  const nextActions = briefing.nextActions.length
+    ? briefing.nextActions
+        .slice(0, 5)
+        .map((item) => `- ${textValue(item.roomName, "업무방")}: ${textValue(item.title, "다음 행동 확인")}`)
+        .join("\n")
+    : "- 새로 지정할 다음 행동은 없습니다.";
+  const decisionsNeeded = briefing.decisionsNeeded.length
+    ? briefing.decisionsNeeded
+        .slice(0, 4)
+        .map((item) => `- ${textValue(item.title, "결정 필요 항목")}`)
+        .join("\n")
+    : "- 메인 회의방에서 즉시 결정해야 할 항목은 없습니다.";
+
+  return [
+    "**총괄 브리핑**",
+    briefing.summary,
+    "",
+    `**방별 현황 (${roomBriefings.length}개 방)**`,
+    highlights || "- 보고할 업무방이 없습니다.",
+    "",
+    "**위험/병목**",
+    risks,
+    "",
+    "**결정 필요**",
+    decisionsNeeded,
+    "",
+    "**다음 행동**",
+    nextActions,
+  ].join("\n");
+}
+
+function auditActorAgentId(agentId: string) {
+  return agentId === getCoordinatorAgent().id ? undefined : agentId;
+}
+
+function textValue(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 export async function runAgent(input: RunAgentInput) {

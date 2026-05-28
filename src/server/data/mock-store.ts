@@ -8,6 +8,7 @@ import {
   mockUser,
   rooms as seedRooms,
 } from "@/lib/mock-data";
+import { COORDINATOR_AGENT_ID, getCoordinatorAgent } from "@/lib/agents/development-agent";
 import type {
   Agent,
   AgentPersona,
@@ -15,11 +16,13 @@ import type {
   AgentRun,
   AgentRunEvent,
   AuditLog,
+  CoordinatorBriefing,
   Decision,
   DomainMemory,
   FileRecord,
   MeetingImport,
   MemoryWriteReview,
+  RoomBriefing,
   RoomMembership,
   RoomMemoryStore,
   RoomMessage,
@@ -49,6 +52,8 @@ type MockState = {
   videoMeetings: VideoMeeting[];
   videoArtifacts: VideoMeetingArtifact[];
   videoEvents: VideoMeetingEvent[];
+  roomBriefings: RoomBriefing[];
+  coordinatorBriefings: CoordinatorBriefing[];
   removedFileAccess: Array<{ roomId: string; fileId: string }>;
   sharedFileAccess: Array<{ roomId: string; fileId: string; accessLevel: FileRecord["accessLevel"] }>;
 };
@@ -179,6 +184,8 @@ function initialState(): MockState {
     videoMeetings: [],
     videoArtifacts: [],
     videoEvents: [],
+    roomBriefings: [],
+    coordinatorBriefings: [],
     removedFileAccess: [],
     sharedFileAccess: [],
   };
@@ -212,6 +219,9 @@ export const mockStore = {
   },
 
   getAgent(agentId: string) {
+    if (agentId === COORDINATOR_AGENT_ID) {
+      return getCoordinatorAgent();
+    }
     return seedAgents.find((agent) => agent.id === agentId) ?? null;
   },
 
@@ -838,5 +848,60 @@ export const mockStore = {
 
   listVideoEvents(meetingId?: string) {
     return state().videoEvents.filter((event) => !meetingId || event.videoMeetingId === meetingId);
+  },
+
+  listRoomBriefings(roomId?: string, limit = 20) {
+    return state()
+      .roomBriefings.filter((briefing) => !roomId || briefing.roomId === roomId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  },
+
+  createRoomBriefing(input: Omit<RoomBriefing, "id" | "createdAt" | "status" | "metadata"> & Partial<RoomBriefing>) {
+    const briefing: RoomBriefing = {
+      id: id(),
+      roomId: input.roomId,
+      agentId: input.agentId ?? null,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+      summary: input.summary,
+      risks: input.risks ?? [],
+      nextActions: input.nextActions ?? [],
+      blockedItems: input.blockedItems ?? [],
+      sourceCounts: input.sourceCounts ?? {},
+      status: input.status ?? "ready",
+      createdBy: input.createdBy ?? mockUser.userId,
+      createdAt: now(),
+      metadata: input.metadata ?? {},
+    };
+    state().roomBriefings.push(briefing);
+    return briefing;
+  },
+
+  listCoordinatorBriefings(limit = 10) {
+    return [...state().coordinatorBriefings]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  },
+
+  createCoordinatorBriefing(
+    input: Omit<CoordinatorBriefing, "id" | "createdAt" | "metadata"> & Partial<CoordinatorBriefing>,
+  ) {
+    const briefing: CoordinatorBriefing = {
+      id: id(),
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+      summary: input.summary,
+      roomHighlights: input.roomHighlights ?? [],
+      crossRoomRisks: input.crossRoomRisks ?? [],
+      decisionsNeeded: input.decisionsNeeded ?? [],
+      nextActions: input.nextActions ?? [],
+      sourceRoomBriefingIds: input.sourceRoomBriefingIds ?? [],
+      createdBy: input.createdBy ?? mockUser.userId,
+      createdAt: now(),
+      metadata: input.metadata ?? {},
+    };
+    state().coordinatorBriefings.push(briefing);
+    return briefing;
   },
 };

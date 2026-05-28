@@ -134,7 +134,7 @@ function createPendingAgentMessage(roomId: string, threadId: string, run: AgentR
     agentRunId: run.id,
     type: run.mode === "meeting_guest" ? "guest_agent" : "agent",
     content: "응답 준비 중...",
-    metadata: { pendingAgentRun: true },
+    metadata: { pendingAgentRun: true, guestLabel: run.metadata.guestLabel },
     createdAt: new Date().toISOString(),
   };
 }

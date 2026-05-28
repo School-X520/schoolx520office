@@ -7,7 +7,7 @@ import { requireRoomMember } from "@/server/auth/require-room-member";
 import { shareMessageToMeeting, importMeetingMessageToRoom } from "@/server/collaboration/share-import-service";
 import { toolRegistry } from "@/server/agents/tools/tool-registry";
 import { agentFileMountPath, readRoomFileForAgent } from "@/server/files/file-service";
-import { isDevelopmentAgent } from "@/lib/agents/development-agent";
+import { hasAllRoomSearchAccess } from "@/lib/agents/development-agent";
 import type { AgentRun, RoomMessage } from "@/types/domain";
 
 export async function executeTool(agentRunId: string, toolName: string, input: Record<string, unknown>) {
@@ -218,7 +218,7 @@ function ensureRoomInAgentScope(run: AgentRun, roomId: string) {
 async function ensureRoomReadableInAgentScope(run: AgentRun, roomId: string) {
   const source = shouldUseMockData() ? mockStore : supabaseStore;
   const agent = run.agentId ? await source.getAgent(run.agentId) : null;
-  if (isDevelopmentAgent(agent)) {
+  if (hasAllRoomSearchAccess(agent)) {
     return;
   }
   ensureRoomInAgentScope(run, roomId);

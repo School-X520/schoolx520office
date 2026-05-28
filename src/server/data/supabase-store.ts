@@ -1,5 +1,6 @@
 import "server-only";
 
+import { COORDINATOR_AGENT_ID, getCoordinatorAgent } from "@/lib/agents/development-agent";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
   Agent,
@@ -9,11 +10,13 @@ import type {
   AgentRunEvent,
   AllowedUser,
   AuditLog,
+  CoordinatorBriefing,
   Decision,
   DomainMemory,
   FileRecord,
   MeetingImport,
   MemoryWriteReview,
+  RoomBriefing,
   Room,
   RoomMemoryStore,
   RoomMembership,
@@ -63,6 +66,10 @@ type CreateVideoArtifactInput = Pick<VideoMeetingArtifact, "videoMeetingId" | "a
   Partial<Omit<VideoMeetingArtifact, "id" | "createdAt">>;
 type CreateVideoEventInput = Pick<VideoMeetingEvent, "videoMeetingId" | "roomId" | "eventType"> &
   Partial<Omit<VideoMeetingEvent, "id" | "createdAt">>;
+type CreateRoomBriefingInput = Pick<RoomBriefing, "roomId" | "periodStart" | "periodEnd" | "summary"> &
+  Partial<Omit<RoomBriefing, "id" | "roomId" | "periodStart" | "periodEnd" | "summary" | "createdAt">>;
+type CreateCoordinatorBriefingInput = Pick<CoordinatorBriefing, "periodStart" | "periodEnd" | "summary"> &
+  Partial<Omit<CoordinatorBriefing, "id" | "periodStart" | "periodEnd" | "summary" | "createdAt">>;
 
 function db() {
   const client = getSupabaseAdminClient();
@@ -98,6 +105,17 @@ function isAgentPersonaSchemaMissing(error: DbError | null) {
     error.message.includes("persona_draft") ||
     error.message.includes("persona_published") ||
     error.message.includes("agent_persona_versions") ||
+    error.message.includes("schema cache")
+  );
+}
+
+function isCoordinatorBriefingSchemaMissing(error: DbError | null) {
+  if (!error?.message) {
+    return false;
+  }
+  return (
+    error.message.includes("room_briefings") ||
+    error.message.includes("coordinator_briefings") ||
     error.message.includes("schema cache")
   );
 }
@@ -530,6 +548,129 @@ function videoEventFrom(rowValue: Record<string, unknown>): VideoMeetingEvent {
   };
 }
 
+function roomBriefingFrom(rowValue: Record<string, unknown>): RoomBriefing {
+  return {
+    id: text(rowValue.id),
+    roomId: text(rowValue.room_id),
+    agentId: nullableText(rowValue.agent_id),
+    periodStart: text(rowValue.period_start),
+    periodEnd: text(rowValue.period_end),
+    summary: text(rowValue.summary),
+    risks: jsonArray(rowValue.risks),
+    nextActions: jsonArray(rowValue.next_actions),
+    blockedItems: jsonArray(rowValue.blocked_items),
+    sourceCounts: jsonObject(rowValue.source_counts),
+    status: text(rowValue.status, "ready") as RoomBriefing["status"],
+    createdBy: nullableText(rowValue.created_by),
+    createdAt: text(rowValue.created_at),
+    metadata: jsonObject(rowValue.metadata),
+  };
+}
+
+function coordinatorBriefingFrom(rowValue: Record<string, unknown>): CoordinatorBriefing {
+  return {
+    id: text(rowValue.id),
+    periodStart: text(rowValue.period_start),
+    periodEnd: text(rowValue.period_end),
+    summary: text(rowValue.summary),
+    roomHighlights: jsonArray(rowValue.room_highlights),
+    crossRoomRisks: jsonArray(rowValue.cross_room_risks),
+    decisionsNeeded: jsonArray(rowValue.decisions_needed),
+    nextActions: jsonArray(rowValue.next_actions),
+    sourceRoomBriefingIds: Array.isArray(rowValue.source_room_briefing_ids)
+      ? rowValue.source_room_briefing_ids.map(String)
+      : [],
+    createdBy: nullableText(rowValue.created_by),
+    createdAt: text(rowValue.created_at),
+    metadata: jsonObject(rowValue.metadata),
+  };
+}
+
+function fallbackRoomBriefing(input: CreateRoomBriefingInput): RoomBriefing {
+  return {
+    id: crypto.randomUUID(),
+    roomId: input.roomId,
+    agentId: input.agentId ?? null,
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    summary: input.summary,
+    risks: input.risks ?? [],
+    nextActions: input.nextActions ?? [],
+    blockedItems: input.blockedItems ?? [],
+    sourceCounts: input.sourceCounts ?? {},
+    status: input.status ?? "ready",
+    createdBy: input.createdBy ?? null,
+    createdAt: new Date().toISOString(),
+    metadata: { ...(input.metadata ?? {}), fallbackStore: "audit_logs" },
+  };
+}
+
+function fallbackCoordinatorBriefing(input: CreateCoordinatorBriefingInput): CoordinatorBriefing {
+  return {
+    id: crypto.randomUUID(),
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    summary: input.summary,
+    roomHighlights: input.roomHighlights ?? [],
+    crossRoomRisks: input.crossRoomRisks ?? [],
+    decisionsNeeded: input.decisionsNeeded ?? [],
+    nextActions: input.nextActions ?? [],
+    sourceRoomBriefingIds: input.sourceRoomBriefingIds ?? [],
+    createdBy: input.createdBy ?? null,
+    createdAt: new Date().toISOString(),
+    metadata: { ...(input.metadata ?? {}), fallbackStore: "audit_logs" },
+  };
+}
+
+function roomBriefingFromJson(value: unknown): RoomBriefing | null {
+  const source = jsonObject(value);
+  const roomId = text(source.roomId);
+  const summary = text(source.summary);
+  if (!roomId || !summary) {
+    return null;
+  }
+  return {
+    id: text(source.id, crypto.randomUUID()),
+    roomId,
+    agentId: nullableText(source.agentId),
+    periodStart: text(source.periodStart),
+    periodEnd: text(source.periodEnd),
+    summary,
+    risks: jsonArray(source.risks),
+    nextActions: jsonArray(source.nextActions),
+    blockedItems: jsonArray(source.blockedItems),
+    sourceCounts: jsonObject(source.sourceCounts),
+    status: text(source.status, "ready") as RoomBriefing["status"],
+    createdBy: nullableText(source.createdBy),
+    createdAt: text(source.createdAt, new Date().toISOString()),
+    metadata: jsonObject(source.metadata),
+  };
+}
+
+function coordinatorBriefingFromJson(value: unknown): CoordinatorBriefing | null {
+  const source = jsonObject(value);
+  const summary = text(source.summary);
+  if (!summary) {
+    return null;
+  }
+  return {
+    id: text(source.id, crypto.randomUUID()),
+    periodStart: text(source.periodStart),
+    periodEnd: text(source.periodEnd),
+    summary,
+    roomHighlights: jsonArray(source.roomHighlights),
+    crossRoomRisks: jsonArray(source.crossRoomRisks),
+    decisionsNeeded: jsonArray(source.decisionsNeeded),
+    nextActions: jsonArray(source.nextActions),
+    sourceRoomBriefingIds: Array.isArray(source.sourceRoomBriefingIds)
+      ? source.sourceRoomBriefingIds.map(String)
+      : [],
+    createdBy: nullableText(source.createdBy),
+    createdAt: text(source.createdAt, new Date().toISOString()),
+    metadata: jsonObject(source.metadata),
+  };
+}
+
 export const supabaseStore = {
   async listRooms() {
     const { data, error } = await db()
@@ -712,6 +853,9 @@ export const supabaseStore = {
   async getAgent(agentId: string) {
     const { data, error } = await db().from("agents").select("*").eq("id", agentId).maybeSingle();
     const result = row(assertOk(data, error));
+    if (!result && agentId === COORDINATOR_AGENT_ID) {
+      return getCoordinatorAgent();
+    }
     return result ? agentFrom(result) : null;
   },
 
@@ -1039,12 +1183,19 @@ export const supabaseStore = {
 
   async createAgentRun(input: Partial<AgentRun> & Pick<AgentRun, "roomId" | "mode" | "runType">) {
     const thread = input.threadId ? null : await this.ensureRoomThread(input.roomId);
+    const storedAgentId = input.agentId === COORDINATOR_AGENT_ID ? null : input.agentId ?? null;
+    const metadata = {
+      ...(input.metadata ?? {}),
+      ...(input.agentId === COORDINATOR_AGENT_ID
+        ? { coordinatorAgentId: input.agentId, guestLabel: getCoordinatorAgent().name }
+        : {}),
+    };
     let result = await db()
       .from("agent_runs")
       .insert({
         room_id: input.roomId,
         thread_id: input.threadId ?? thread?.id,
-        agent_id: input.agentId ?? null,
+        agent_id: storedAgentId,
         initiated_by: input.initiatedBy ?? null,
         anthropic_session_id: input.anthropicSessionId ?? null,
         mode: input.mode,
@@ -1057,7 +1208,7 @@ export const supabaseStore = {
         token_usage: input.tokenUsage ?? {},
         error: input.error ?? null,
         ended_at: input.endedAt ?? null,
-        metadata: input.metadata ?? {},
+        metadata,
       })
       .select("*")
       .single();
@@ -1066,7 +1217,7 @@ export const supabaseStore = {
         .from("agent_runs")
         .insert({
           room_id: input.roomId,
-          agent_id: input.agentId ?? null,
+          agent_id: storedAgentId,
           initiated_by: input.initiatedBy ?? null,
           anthropic_session_id: input.anthropicSessionId ?? null,
           mode: input.mode,
@@ -1079,7 +1230,7 @@ export const supabaseStore = {
           token_usage: input.tokenUsage ?? {},
           error: input.error ?? null,
           ended_at: input.endedAt ?? null,
-          metadata: input.metadata ?? {},
+          metadata,
         })
         .select("*")
         .single();
@@ -1548,5 +1699,119 @@ export const supabaseStore = {
       .select("*")
       .single();
     return videoEventFrom(row(assertOk(data, error))!);
+  },
+
+  async listRoomBriefings(roomId?: string, limit = 20) {
+    let query = db().from("room_briefings").select("*").order("created_at", { ascending: false }).limit(limit);
+    if (roomId) {
+      query = query.eq("room_id", roomId);
+    }
+    const { data, error } = await query;
+    if (isCoordinatorBriefingSchemaMissing(error)) {
+      let fallbackQuery = db()
+        .from("audit_logs")
+        .select("*")
+        .eq("action", "room_briefing.generated")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (roomId) {
+        fallbackQuery = fallbackQuery.eq("room_id", roomId);
+      }
+      const fallback = await fallbackQuery;
+      return rows(assertOk(fallback.data, fallback.error))
+        .map(auditFrom)
+        .map((log) => roomBriefingFromJson(log.metadata.briefing))
+        .filter((briefing): briefing is RoomBriefing => Boolean(briefing));
+    }
+    return rows(assertOk(data, error)).map(roomBriefingFrom);
+  },
+
+  async createRoomBriefing(input: CreateRoomBriefingInput) {
+    const { data, error } = await db()
+      .from("room_briefings")
+      .insert({
+        room_id: input.roomId,
+        agent_id: input.agentId ?? null,
+        period_start: input.periodStart,
+        period_end: input.periodEnd,
+        summary: input.summary,
+        risks: input.risks ?? [],
+        next_actions: input.nextActions ?? [],
+        blocked_items: input.blockedItems ?? [],
+        source_counts: input.sourceCounts ?? {},
+        status: input.status ?? "ready",
+        created_by: input.createdBy ?? null,
+        metadata: input.metadata ?? {},
+      })
+      .select("*")
+      .single();
+    if (isCoordinatorBriefingSchemaMissing(error)) {
+      const fallback = fallbackRoomBriefing(input);
+      await this.addAuditLog({
+        actorUserId: input.createdBy ?? null,
+        actorAgentId: input.agentId ?? null,
+        roomId: input.roomId,
+        action: "room_briefing.generated",
+        targetType: "room_briefing",
+        targetId: fallback.id,
+        metadata: { briefing: fallback },
+      });
+      return fallback;
+    }
+    return roomBriefingFrom(row(assertOk(data, error))!);
+  },
+
+  async listCoordinatorBriefings(limit = 10) {
+    const { data, error } = await db()
+      .from("coordinator_briefings")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (isCoordinatorBriefingSchemaMissing(error)) {
+      const fallback = await db()
+        .from("audit_logs")
+        .select("*")
+        .eq("action", "coordinator_briefing.generated")
+        .order("created_at", { ascending: false })
+        .limit(Math.max(limit * 4, 20));
+      return rows(assertOk(fallback.data, fallback.error))
+        .map(auditFrom)
+        .map((log) => coordinatorBriefingFromJson(log.metadata.briefing))
+        .filter((briefing): briefing is CoordinatorBriefing => Boolean(briefing))
+        .slice(0, limit);
+    }
+    return rows(assertOk(data, error)).map(coordinatorBriefingFrom);
+  },
+
+  async createCoordinatorBriefing(input: CreateCoordinatorBriefingInput) {
+    const { data, error } = await db()
+      .from("coordinator_briefings")
+      .insert({
+        period_start: input.periodStart,
+        period_end: input.periodEnd,
+        summary: input.summary,
+        room_highlights: input.roomHighlights ?? [],
+        cross_room_risks: input.crossRoomRisks ?? [],
+        decisions_needed: input.decisionsNeeded ?? [],
+        next_actions: input.nextActions ?? [],
+        source_room_briefing_ids: input.sourceRoomBriefingIds ?? [],
+        created_by: input.createdBy ?? null,
+        metadata: input.metadata ?? {},
+      })
+      .select("*")
+      .single();
+    if (isCoordinatorBriefingSchemaMissing(error)) {
+      const fallback = fallbackCoordinatorBriefing(input);
+      await this.addAuditLog({
+        actorUserId: input.createdBy ?? null,
+        roomId: "meeting",
+        action: "coordinator_briefing.generated",
+        targetType: "coordinator_briefing",
+        targetId: fallback.id,
+        metadata: { briefing: fallback },
+      });
+      return fallback;
+    }
+    return coordinatorBriefingFrom(row(assertOk(data, error))!);
   },
 };
