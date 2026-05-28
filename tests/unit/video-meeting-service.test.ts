@@ -33,6 +33,7 @@ describe("video meeting service", () => {
     });
 
     expect(first.status).toBe("live");
+    expect(first.joinUrl).toMatch(/^https:\/\/g\.co\/meet\/schoolx-meeting-/);
     expect(second.id).toBe(first.id);
     expect(mockStore.listVideoMeetings("meeting").filter((meeting) => meeting.status === "live")).toHaveLength(1);
     expect(mockStore.listVideoEvents(first.id).map((event) => event.eventType)).toEqual(
