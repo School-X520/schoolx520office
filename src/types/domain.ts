@@ -111,6 +111,15 @@ export type RoomMembership = {
   joinedAt: string;
 };
 
+export type PendingRoomMembership = {
+  email: string;
+  roomId: string;
+  role: RoomRole;
+  assignedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type RoomThread = {
   id: string;
   roomId: string;

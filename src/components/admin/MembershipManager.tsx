@@ -6,37 +6,59 @@ import { Check, ShieldCheck, UserMinus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
-import type { Room, RoomMembership, RoomRole, UserProfile } from "@/types/domain";
+import type { AllowedUser, PendingRoomMembership, Room, RoomMembership, RoomRole, UserProfile } from "@/types/domain";
 
 const selectClass =
   "h-10 w-full rounded-md border border-line bg-white/70 px-3 text-sm text-ink shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2";
 
 export function MembershipManager({
+  allowedUsers,
   rooms,
   memberships,
+  pendingMemberships,
   profiles,
 }: {
+  allowedUsers: AllowedUser[];
   rooms: Room[];
   memberships: RoomMembership[];
+  pendingMemberships: PendingRoomMembership[];
   profiles: UserProfile[];
 }) {
   const router = useRouter();
-  const firstUserId = profiles[0]?.userId ?? "";
-  function membershipRole(userId: string, nextRoomId: string) {
-    return memberships.find((item) => item.userId === userId && item.roomId === nextRoomId)?.role ?? "member";
+  const targets = useMemo(
+    () => buildMembershipTargets(profiles, allowedUsers),
+    [allowedUsers, profiles],
+  );
+  const firstTargetId = targets[0]?.id ?? "";
+
+  function membershipRole(targetId: string, nextRoomId: string) {
+    const target = targets.find((item) => item.id === targetId);
+    if (!target) {
+      return "member";
+    }
+    if (target.userId) {
+      return memberships.find((item) => item.userId === target.userId && item.roomId === nextRoomId)?.role ?? "member";
+    }
+    return pendingMemberships.find((item) => item.email === target.email && item.roomId === nextRoomId)?.role ?? "member";
   }
 
-  const [targetUserId, setTargetUserId] = useState(firstUserId);
+  function hasMembership(targetId: string, nextRoomId: string) {
+    const target = targets.find((item) => item.id === targetId);
+    if (!target) {
+      return false;
+    }
+    if (target.userId) {
+      return memberships.some((item) => item.userId === target.userId && item.roomId === nextRoomId);
+    }
+    return pendingMemberships.some((item) => item.email === target.email && item.roomId === nextRoomId);
+  }
+
+  const [targetUserId, setTargetUserId] = useState(firstTargetId);
   const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>(() => (rooms[0]?.id ? [rooms[0].id] : []));
   const [role, setRole] = useState<RoomRole>("member");
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const selectedMemberships = useMemo(
-    () =>
-      memberships.filter((item) => item.userId === targetUserId && selectedRoomIds.includes(item.roomId)),
-    [memberships, selectedRoomIds, targetUserId],
-  );
-  const selectedExistingCount = selectedMemberships.length;
+  const selectedExistingCount = selectedRoomIds.filter((roomId) => hasMembership(targetUserId, roomId)).length;
 
   function toggleRoom(roomId: string) {
     setSelectedRoomIds((current) =>
@@ -80,9 +102,10 @@ export function MembershipManager({
             setTargetUserId(nextUserId);
           }}
         >
-          {profiles.map((profile) => (
-            <option key={profile.userId} value={profile.userId}>
-              {profile.email}
+          {targets.map((target) => (
+            <option key={target.id} value={target.id}>
+              {target.email}
+              {target.pending ? " (가입 전)" : ""}
             </option>
           ))}
         </select>
@@ -124,8 +147,10 @@ export function MembershipManager({
         {rooms.map((room) => {
           const selected = selectedRoomIds.includes(room.id);
           const currentRole = membershipRole(targetUserId, room.id);
-          const hasMembership = memberships.some((item) => item.userId === targetUserId && item.roomId === room.id);
-          const count = memberships.filter((item) => item.roomId === room.id).length;
+          const currentHasMembership = hasMembership(targetUserId, room.id);
+          const count =
+            memberships.filter((item) => item.roomId === room.id).length +
+            pendingMemberships.filter((item) => item.roomId === room.id).length;
           return (
             <label
               key={room.id}
@@ -149,7 +174,7 @@ export function MembershipManager({
                 </span>
                 <span className="mt-1 block text-sm text-ink-soft tabular-nums">{count}명</span>
                 <span className="mt-1 block text-xs text-ink-soft">
-                  {hasMembership ? `현재 권한: ${currentRole}` : "현재 권한 없음"}
+                  {currentHasMembership ? `현재 권한: ${currentRole}` : "현재 권한 없음"}
                 </span>
               </span>
             </label>
@@ -160,7 +185,7 @@ export function MembershipManager({
         <Button
           type="button"
           size="sm"
-          disabled={isPending || !profiles.length || !selectedRoomIds.length}
+          disabled={isPending || !targets.length || !selectedRoomIds.length}
           onClick={() => submit("membership.updated")}
         >
           <ShieldCheck className="size-4" />
@@ -170,7 +195,7 @@ export function MembershipManager({
           type="button"
           size="sm"
           variant="secondary"
-          disabled={isPending || !profiles.length || !selectedRoomIds.length}
+          disabled={isPending || !targets.length || !selectedRoomIds.length}
           onClick={() => submit("membership.removed")}
         >
           <UserMinus className="size-4" />
@@ -180,4 +205,29 @@ export function MembershipManager({
       {message ? <p className="text-sm text-ink-soft">{message}</p> : null}
     </div>
   );
+}
+
+type MembershipTarget = {
+  id: string;
+  email: string;
+  userId?: string;
+  pending: boolean;
+};
+
+function buildMembershipTargets(profiles: UserProfile[], allowedUsers: AllowedUser[]): MembershipTarget[] {
+  const profileTargets = profiles.map((profile) => ({
+    id: profile.userId,
+    email: profile.email.toLowerCase(),
+    userId: profile.userId,
+    pending: false,
+  }));
+  const profileEmails = new Set(profileTargets.map((target) => target.email));
+  const pendingTargets = allowedUsers
+    .filter((user) => user.isActive && !profileEmails.has(user.email.toLowerCase()))
+    .map((user) => ({
+      id: `email:${user.email.toLowerCase()}`,
+      email: user.email.toLowerCase(),
+      pending: true,
+    }));
+  return [...profileTargets, ...pendingTargets].sort((a, b) => a.email.localeCompare(b.email));
 }

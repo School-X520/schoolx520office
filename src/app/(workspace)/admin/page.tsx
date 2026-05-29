@@ -30,6 +30,7 @@ export default async function AdminPage() {
         allowedUsers={await source.listAllowedUsers()}
         currentUserEmail={user.email}
         memberships={await source.listMemberships()}
+        pendingMemberships={await source.listPendingRoomMemberships()}
         profiles={await source.listUserProfiles()}
         rooms={await source.listRooms()}
       />

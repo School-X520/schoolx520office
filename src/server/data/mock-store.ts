@@ -22,6 +22,7 @@ import type {
   FileRecord,
   MeetingImport,
   MemoryWriteReview,
+  PendingRoomMembership,
   RoomBriefing,
   RoomMembership,
   RoomMemoryStore,
@@ -48,6 +49,7 @@ type MockState = {
   tasks: Task[];
   auditLogs: AuditLog[];
   memoryReviews: MemoryWriteReview[];
+  pendingMemberships: PendingRoomMembership[];
   memoryStores: RoomMemoryStore[];
   videoMeetings: VideoMeeting[];
   videoArtifacts: VideoMeetingArtifact[];
@@ -172,6 +174,7 @@ function initialState(): MockState {
     ],
     auditLogs: [],
     memoryReviews: [],
+    pendingMemberships: [],
     memoryStores: seedRooms.map((room) => ({
       id: `${room.id}-memory-store-link`,
       roomId: room.id,
@@ -306,6 +309,10 @@ export const mockStore = {
     return [mockUser];
   },
 
+  getUserProfileByEmail(email: string) {
+    return [mockUser].find((profile) => profile.email.toLowerCase() === email.toLowerCase()) ?? null;
+  },
+
   listMemberships() {
     return seedMemberships;
   },
@@ -344,6 +351,58 @@ export const mockStore = {
     }
     seedMemberships.splice(index, 1);
     return { ok: true };
+  },
+
+  listPendingRoomMemberships(email?: string) {
+    return state()
+      .pendingMemberships.filter((membership) => !email || membership.email === email.toLowerCase())
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  },
+
+  upsertPendingRoomMembership(input: {
+    email: string;
+    roomId: string;
+    role: RoomMembership["role"];
+    assignedBy?: string | null;
+  }) {
+    const email = input.email.toLowerCase();
+    const existing = state().pendingMemberships.find(
+      (membership) => membership.email === email && membership.roomId === input.roomId,
+    );
+    if (existing) {
+      existing.role = input.role;
+      existing.assignedBy = input.assignedBy ?? existing.assignedBy ?? null;
+      existing.updatedAt = now();
+      return existing;
+    }
+    const membership: PendingRoomMembership = {
+      email,
+      roomId: input.roomId,
+      role: input.role,
+      assignedBy: input.assignedBy ?? null,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    state().pendingMemberships.push(membership);
+    return membership;
+  },
+
+  deletePendingRoomMembership(input: { email: string; roomId: string }) {
+    const email = input.email.toLowerCase();
+    const before = state().pendingMemberships.length;
+    state().pendingMemberships = state().pendingMemberships.filter(
+      (membership) => membership.email !== email || membership.roomId !== input.roomId,
+    );
+    return { ok: state().pendingMemberships.length < before };
+  },
+
+  applyPendingRoomMemberships(email: string, userId: string) {
+    const pending = this.listPendingRoomMemberships(email);
+    pending.forEach((membership) => {
+      this.upsertMembership({ userId, roomId: membership.roomId, role: membership.role });
+      this.deletePendingRoomMembership({ email, roomId: membership.roomId });
+    });
+    return pending;
   },
 
   listThreads(roomId: string) {

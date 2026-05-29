@@ -37,26 +37,60 @@ export async function POST(request: Request) {
     }
     const source = shouldUseMockData() ? mockStore : supabaseStore;
     const action = body.action ?? "membership.updated";
+    const pendingEmail = pendingEmailFromTarget(body.targetUserId);
+    const resolvedProfile =
+      pendingEmail && !shouldUseMockData() ? await supabaseStore.getUserProfileByEmail(pendingEmail) : null;
+    const targetUserId = resolvedProfile?.userId ?? (pendingEmail ? null : body.targetUserId);
+
+    if (pendingEmail) {
+      const allowedUser = shouldUseMockData()
+        ? mockStore.getAllowedUser(pendingEmail)
+        : await supabaseStore.getAllowedUser(pendingEmail);
+      if (!allowedUser?.isActive) {
+        return jsonOk({ ok: false, message: "활성 승인 사용자를 찾을 수 없습니다." }, { status: 404 });
+      }
+    }
+
     const memberships = [];
     for (const roomId of roomIds) {
       if (action === "membership.removed") {
-        if (shouldUseMockData()) {
-          mockStore.deleteMembership({ userId: body.targetUserId, roomId });
+        if (pendingEmail && !targetUserId) {
+          if (shouldUseMockData()) {
+            mockStore.deletePendingRoomMembership({ email: pendingEmail, roomId });
+          } else {
+            await supabaseStore.deletePendingRoomMembership({ email: pendingEmail, roomId, deletedBy: user.userId });
+          }
+        } else if (targetUserId && shouldUseMockData()) {
+          mockStore.deleteMembership({ userId: targetUserId, roomId });
         } else {
-          await supabaseStore.deleteMembership({ userId: body.targetUserId, roomId });
+          await supabaseStore.deleteMembership({ userId: targetUserId!, roomId });
         }
       } else {
-        const membership = shouldUseMockData()
-          ? mockStore.upsertMembership({
-              userId: body.targetUserId,
-              roomId,
-              role: body.role ?? "member",
-            })
-          : await supabaseStore.upsertMembership({
-              userId: body.targetUserId,
-              roomId,
-              role: body.role ?? "member",
-            });
+        const membership = pendingEmail && !targetUserId
+          ? shouldUseMockData()
+            ? mockStore.upsertPendingRoomMembership({
+                email: pendingEmail,
+                roomId,
+                role: body.role ?? "member",
+                assignedBy: user.userId,
+              })
+            : await supabaseStore.upsertPendingRoomMembership({
+                email: pendingEmail,
+                roomId,
+                role: body.role ?? "member",
+                assignedBy: user.userId,
+              })
+          : shouldUseMockData()
+            ? mockStore.upsertMembership({
+                userId: targetUserId!,
+                roomId,
+                role: body.role ?? "member",
+              })
+            : await supabaseStore.upsertMembership({
+                userId: targetUserId!,
+                roomId,
+                role: body.role ?? "member",
+              });
         memberships.push(membership);
       }
       await source.addAuditLog({
@@ -64,12 +98,16 @@ export async function POST(request: Request) {
         roomId,
         action,
         targetType: "room_membership",
-        targetId: body.targetUserId,
-        metadata: { role: body.role ?? "member", mockOnly: shouldUseMockData() },
+        targetId: targetUserId ?? pendingEmail ?? body.targetUserId,
+        metadata: { role: body.role ?? "member", pendingEmail, mockOnly: shouldUseMockData() },
       });
     }
     return jsonOk({ ok: true, memberships });
   } catch (error) {
     return jsonError(error);
   }
+}
+
+function pendingEmailFromTarget(targetUserId: string) {
+  return targetUserId.startsWith("email:") ? targetUserId.slice("email:".length).trim().toLowerCase() : "";
 }

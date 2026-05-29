@@ -4,21 +4,25 @@ import { AllowedUsersManager } from "@/components/admin/AllowedUsersManager";
 import { MembershipManager } from "@/components/admin/MembershipManager";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { StatusPill } from "@/components/layout/StatusPill";
-import type { AllowedUser, RoomMembership, Room, UserProfile } from "@/types/domain";
+import type { AllowedUser, PendingRoomMembership, RoomMembership, Room, UserProfile } from "@/types/domain";
 
 export function AdminDashboard({
   allowedUsers,
   currentUserEmail,
   memberships,
+  pendingMemberships,
   profiles,
   rooms,
 }: {
   allowedUsers: AllowedUser[];
   currentUserEmail: string;
   memberships: RoomMembership[];
+  pendingMemberships: PendingRoomMembership[];
   profiles: UserProfile[];
   rooms: Room[];
 }) {
+  const profileEmails = new Set(profiles.map((profile) => profile.email.toLowerCase()));
+  const targetCount = profiles.length + allowedUsers.filter((user) => !profileEmails.has(user.email.toLowerCase())).length;
   return (
     <div className="space-y-4">
       <div>
@@ -50,9 +54,15 @@ export function AdminDashboard({
             <Users className="size-4 text-sage" />
             방 권한
           </p>
-          <StatusPill tone="neutral">{profiles.length} profiles</StatusPill>
+          <StatusPill tone="neutral">{targetCount} users</StatusPill>
         </div>
-        <MembershipManager rooms={rooms} memberships={memberships} profiles={profiles} />
+        <MembershipManager
+          allowedUsers={allowedUsers}
+          rooms={rooms}
+          memberships={memberships}
+          pendingMemberships={pendingMemberships}
+          profiles={profiles}
+        />
       </WarmCard>
     </div>
   );

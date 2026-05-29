@@ -16,6 +16,7 @@ import type {
   FileRecord,
   MeetingImport,
   MemoryWriteReview,
+  PendingRoomMembership,
   RoomBriefing,
   Room,
   RoomMemoryStore,
@@ -58,6 +59,8 @@ type CreateTaskInput = Pick<Task, "roomId" | "title"> &
 type CreateAuditInput = Pick<AuditLog, "action"> & Partial<Omit<AuditLog, "id" | "createdAt">>;
 type CreateMemoryReviewInput = Pick<MemoryWriteReview, "roomId" | "proposedMemory"> &
   Partial<Omit<MemoryWriteReview, "id" | "createdAt">>;
+type CreatePendingMembershipInput = Pick<PendingRoomMembership, "email" | "roomId" | "role"> &
+  Partial<Omit<PendingRoomMembership, "email" | "roomId" | "role" | "createdAt" | "updatedAt">>;
 type CreateAgentPersonaVersionInput = Pick<AgentPersonaVersion, "agentId" | "roomId" | "persona" | "versionNo"> &
   Partial<Omit<AgentPersonaVersion, "id" | "createdAt">>;
 type CreateVideoMeetingInput = Pick<VideoMeeting, "roomId" | "provider" | "title"> &
@@ -118,6 +121,13 @@ function isCoordinatorBriefingSchemaMissing(error: DbError | null) {
     error.message.includes("coordinator_briefings") ||
     error.message.includes("schema cache")
   );
+}
+
+function isPendingMembershipSchemaMissing(error: DbError | null) {
+  if (!error?.message) {
+    return false;
+  }
+  return error.message.includes("pending_room_memberships") || error.message.includes("schema cache");
 }
 
 function rows(data: unknown) {
@@ -469,6 +479,34 @@ function memoryReviewFrom(rowValue: Record<string, unknown>): MemoryWriteReview 
   };
 }
 
+function pendingMembershipFrom(rowValue: Record<string, unknown>): PendingRoomMembership {
+  return {
+    email: text(rowValue.email).toLowerCase(),
+    roomId: text(rowValue.room_id),
+    role: text(rowValue.role, "member") as PendingRoomMembership["role"],
+    assignedBy: nullableText(rowValue.assigned_by),
+    createdAt: text(rowValue.created_at),
+    updatedAt: text(rowValue.updated_at, text(rowValue.created_at)),
+  };
+}
+
+function pendingMembershipFromJson(value: unknown): PendingRoomMembership | null {
+  const source = jsonObject(value);
+  const email = text(source.email).toLowerCase();
+  const roomId = text(source.roomId);
+  if (!email || !roomId) {
+    return null;
+  }
+  return {
+    email,
+    roomId,
+    role: text(source.role, "member") as PendingRoomMembership["role"],
+    assignedBy: nullableText(source.assignedBy),
+    createdAt: text(source.createdAt, new Date().toISOString()),
+    updatedAt: text(source.updatedAt, new Date().toISOString()),
+  };
+}
+
 function agentPersonaVersionFrom(rowValue: Record<string, unknown>): AgentPersonaVersion {
   const persona = agentPersonaFrom(rowValue.persona, defaultAgentPersona({
     name: "업무 봇",
@@ -815,7 +853,9 @@ export const supabaseStore = {
       })
       .select("*")
       .single();
-    return userProfileFrom(row(assertOk(data, error))!);
+    const profile = userProfileFrom(row(assertOk(data, error))!);
+    await this.applyPendingRoomMemberships(profile.email, profile.userId).catch(() => null);
+    return profile;
   },
 
   async upsertMembership(input: {
@@ -843,6 +883,113 @@ export const supabaseStore = {
       .eq("room_id", input.roomId);
     assertOk(data, error);
     return { ok: true };
+  },
+
+  async listPendingRoomMemberships(email?: string) {
+    let query = db()
+      .from("pending_room_memberships")
+      .select("*")
+      .order("updated_at", { ascending: false });
+    if (email) {
+      query = query.eq("email", email.toLowerCase());
+    }
+    const { data, error } = await query;
+    if (isPendingMembershipSchemaMissing(error)) {
+      return this.listPendingRoomMembershipsFromAudit(email);
+    }
+    return rows(assertOk(data, error)).map(pendingMembershipFrom);
+  },
+
+  async upsertPendingRoomMembership(input: CreatePendingMembershipInput) {
+    const now = new Date().toISOString();
+    const normalizedEmail = input.email.toLowerCase();
+    const { data, error } = await db()
+      .from("pending_room_memberships")
+      .upsert({
+        email: normalizedEmail,
+        room_id: input.roomId,
+        role: input.role,
+        assigned_by: input.assignedBy ?? null,
+        updated_at: now,
+      })
+      .select("*")
+      .single();
+    if (isPendingMembershipSchemaMissing(error)) {
+      const membership: PendingRoomMembership = {
+        email: normalizedEmail,
+        roomId: input.roomId,
+        role: input.role,
+        assignedBy: input.assignedBy ?? null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await this.addAuditLog({
+        actorUserId: input.assignedBy ?? null,
+        roomId: input.roomId,
+        action: "pending_room_membership.upsert",
+        targetType: "pending_room_membership",
+        targetId: `${normalizedEmail}:${input.roomId}`,
+        metadata: { membership },
+      });
+      return membership;
+    }
+    return pendingMembershipFrom(row(assertOk(data, error))!);
+  },
+
+  async deletePendingRoomMembership(input: { email: string; roomId: string; deletedBy?: string | null }) {
+    const normalizedEmail = input.email.toLowerCase();
+    const { data, error } = await db()
+      .from("pending_room_memberships")
+      .delete()
+      .eq("email", normalizedEmail)
+      .eq("room_id", input.roomId);
+    if (isPendingMembershipSchemaMissing(error)) {
+      await this.addAuditLog({
+        actorUserId: input.deletedBy ?? null,
+        roomId: input.roomId,
+        action: "pending_room_membership.removed",
+        targetType: "pending_room_membership",
+        targetId: `${normalizedEmail}:${input.roomId}`,
+        metadata: { email: normalizedEmail, roomId: input.roomId },
+      });
+      return { ok: true };
+    }
+    assertOk(data, error);
+    return { ok: true };
+  },
+
+  async applyPendingRoomMemberships(email: string, userId: string) {
+    const pending = await this.listPendingRoomMemberships(email);
+    for (const membership of pending) {
+      await this.upsertMembership({ userId, roomId: membership.roomId, role: membership.role });
+      await this.deletePendingRoomMembership({ email, roomId: membership.roomId });
+    }
+    return pending;
+  },
+
+  async listPendingRoomMembershipsFromAudit(email?: string) {
+    const { data, error } = await db()
+      .from("audit_logs")
+      .select("*")
+      .in("action", ["pending_room_membership.upsert", "pending_room_membership.removed"])
+      .order("created_at", { ascending: true })
+      .limit(1000);
+    const byKey = new Map<string, PendingRoomMembership>();
+    for (const log of rows(assertOk(data, error)).map(auditFrom)) {
+      if (log.action === "pending_room_membership.removed") {
+        const removedEmail = text(log.metadata.email).toLowerCase();
+        const removedRoomId = text(log.metadata.roomId);
+        byKey.delete(`${removedEmail}:${removedRoomId}`);
+        continue;
+      }
+      const membership = pendingMembershipFromJson(log.metadata.membership);
+      if (membership) {
+        byKey.set(`${membership.email}:${membership.roomId}`, membership);
+      }
+    }
+    return [...byKey.values()]
+      .filter((membership) => !email || membership.email === email.toLowerCase())
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   },
 
   async grantAllRoomMemberships(userId: string, role: RoomMembership["role"] = "admin") {

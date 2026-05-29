@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AllowedUsersManager } from "@/components/admin/AllowedUsersManager";
 import { MembershipManager } from "@/components/admin/MembershipManager";
-import type { AllowedUser, Room, RoomMembership, UserProfile } from "@/types/domain";
+import type { AllowedUser, PendingRoomMembership, Room, RoomMembership, UserProfile } from "@/types/domain";
 
 const rooms: Room[] = [
   {
@@ -56,6 +56,19 @@ const profiles: UserProfile[] = [
   },
 ];
 
+const allowedUsers: AllowedUser[] = [
+  {
+    email: "teacher@example.com",
+    invitedBy: null,
+    invitedAt: "2026-05-08T00:00:00Z",
+    notes: null,
+    isActive: true,
+    isAdmin: false,
+  },
+];
+
+const pendingMemberships: PendingRoomMembership[] = [];
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -64,7 +77,7 @@ describe("admin controls", () => {
   it("updates allowed user active/admin state from the table", async () => {
     const fetchMock = vi.fn(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
-    const allowedUsers: AllowedUser[] = [
+    const allowedUsersForTest: AllowedUser[] = [
       {
         email: "teacher@example.com",
         invitedBy: null,
@@ -75,7 +88,7 @@ describe("admin controls", () => {
       },
     ];
 
-    render(<AllowedUsersManager allowedUsers={allowedUsers} currentUserEmail="admin@example.com" />);
+    render(<AllowedUsersManager allowedUsers={allowedUsersForTest} currentUserEmail="admin@example.com" />);
 
     await userEvent.click(screen.getByRole("switch", { name: "teacher@example.com admin" }));
 
@@ -102,7 +115,15 @@ describe("admin controls", () => {
       },
     ];
 
-    render(<MembershipManager rooms={rooms} memberships={memberships} profiles={profiles} />);
+    render(
+      <MembershipManager
+        allowedUsers={allowedUsers}
+        rooms={rooms}
+        memberships={memberships}
+        pendingMemberships={pendingMemberships}
+        profiles={profiles}
+      />,
+    );
 
     await userEvent.click(screen.getByRole("button", { name: "선택 해제" }));
     await userEvent.click(screen.getByLabelText("재무 선택"));
@@ -118,6 +139,52 @@ describe("admin controls", () => {
             action: "membership.updated",
             targetUserId: profiles[0].userId,
             roomIds: ["finance", "research"],
+            role: "member",
+          }),
+        }),
+      );
+    });
+  });
+
+  it("shows approved users without profiles as pending membership targets", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const invitedOnlyUsers: AllowedUser[] = [
+      ...allowedUsers,
+      {
+        email: "new.teacher@example.com",
+        invitedBy: null,
+        invitedAt: "2026-05-08T00:00:00Z",
+        notes: null,
+        isActive: true,
+        isAdmin: false,
+      },
+    ];
+
+    render(
+      <MembershipManager
+        allowedUsers={invitedOnlyUsers}
+        rooms={rooms}
+        memberships={[]}
+        pendingMemberships={[]}
+        profiles={profiles}
+      />,
+    );
+
+    await userEvent.selectOptions(screen.getByLabelText("사용자 선택"), "email:new.teacher@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "선택 해제" }));
+    await userEvent.click(screen.getByLabelText("재무 선택"));
+    await userEvent.click(screen.getByRole("button", { name: "권한 저장" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/admin/memberships",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            action: "membership.updated",
+            targetUserId: "email:new.teacher@example.com",
+            roomIds: ["finance"],
             role: "member",
           }),
         }),
