@@ -136,6 +136,54 @@ describe("video meeting service", () => {
     expect(meeting.metadata.requiresJoinUrlRegistration).toBe(false);
   });
 
+  it("falls back to Calendar event Meet links when the Meet space API fails", async () => {
+    closeOpenMeetingRows("meeting");
+    vi.stubEnv("GOOGLE_MEET_ENABLED", "true");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "client-id");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "client-secret");
+    vi.stubEnv("GOOGLE_REDIRECT_URI", "http://localhost:3000/api/integrations/google/callback");
+    vi.stubEnv("GOOGLE_REFRESH_TOKEN", "refresh-token");
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ access_token: "access-token", expires_in: 3600, token_type: "Bearer" }), {
+            status: 200,
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: { status: "PERMISSION_DENIED", message: "Meet API denied." } }), {
+            status: 403,
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              id: "calendar-event-1",
+              htmlLink: "https://calendar.google.com/event?eid=1",
+              hangoutLink: "https://meet.google.com/CAL-LINK-ONE",
+            }),
+            { status: 200 },
+          ),
+        ),
+    );
+
+    const meeting = await createVideoMeeting(mockUser.userId, {
+      roomId: "meeting",
+      provider: "google_meet",
+      title: "캘린더 링크 회의",
+      consentRecording: false,
+      consentTranscript: false,
+      consentAiSummary: true,
+    });
+
+    expect(meeting.joinUrl).toBe("https://meet.google.com/cal-link-one");
+    expect(meeting.metadata.mode).toBe("api_created_calendar_event");
+    expect(meeting.metadata.calendarEventId).toBe("calendar-event-1");
+    expect(meeting.metadata.requiresJoinUrlRegistration).toBe(false);
+  });
+
   it("registers the generated Meet link before users join", async () => {
     closeOpenMeetingRows("meeting");
     const meeting = await createVideoMeeting(mockUser.userId, {

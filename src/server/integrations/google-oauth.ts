@@ -6,6 +6,7 @@ import { supabaseStore } from "@/server/data/supabase-store";
 export const GOOGLE_MEET_SCOPES = [
   "https://www.googleapis.com/auth/meetings.space.created",
   "https://www.googleapis.com/auth/meetings.space.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
 ];
 export const GOOGLE_MEET_OAUTH_STATE_COOKIE = "schoolx_google_meet_oauth_state";
 

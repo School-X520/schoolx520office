@@ -15,16 +15,19 @@ OAuth scopes:
 
 - `https://www.googleapis.com/auth/meetings.space.created`
 - `https://www.googleapis.com/auth/meetings.space.readonly`
+- `https://www.googleapis.com/auth/calendar.events`
 
 Setup:
 
 1. Set `GOOGLE_REDIRECT_URI` to the deployed callback URL, for example `https://schoolx.example.com/api/integrations/google/callback`.
 2. Run all Supabase migrations, including `0016_integration_tokens.sql`.
 3. Open `/admin/ops` as an admin and click `Google 연결`.
-4. Grant the Meet scopes with the Google account that should create SchoolX meeting spaces.
+4. Grant the Meet and Calendar scopes with the Google account that should create SchoolX meeting spaces.
 
 When Google OAuth is connected, `POST /api/video-meetings` creates a Google Meet space server-side and stores the returned
 `meetingUri` in `video_meetings.join_url`. Other users can immediately join through the SchoolX button.
+If the Meet Spaces API rejects creation, SchoolX falls back to creating a transparent Google Calendar event with a Meet
+conference and stores that Meet link instead.
 
 Fallback behavior:
 
