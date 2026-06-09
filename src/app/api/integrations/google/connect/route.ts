@@ -1,16 +1,48 @@
-import { redirect } from "next/navigation";
-import { getServerEnv } from "@/lib/env";
+import { NextResponse, type NextRequest } from "next/server";
 
-export async function GET() {
-  const env = getServerEnv();
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_REDIRECT_URI) {
-    redirect("/admin/ops?google=setup-required");
+import { shouldUseMockData } from "@/lib/env";
+import { AuthError, ForbiddenError } from "@/server/auth/errors";
+import { requireAdmin } from "@/server/auth/require-user";
+import { buildGoogleMeetOAuthUrl, GOOGLE_MEET_OAUTH_STATE_COOKIE } from "@/server/integrations/google-oauth";
+
+function redirectTo(request: NextRequest, path: string) {
+  return NextResponse.redirect(new URL(path, request.url));
+}
+
+function stateCookieOptions(request: NextRequest) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: request.nextUrl.protocol === "https:",
+    path: "/",
+    maxAge: 10 * 60,
+  };
+}
+
+export async function GET(request: NextRequest) {
+  if (shouldUseMockData()) {
+    return redirectTo(request, "/admin/ops?google=mock-mode");
   }
-  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  url.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
-  url.searchParams.set("redirect_uri", env.GOOGLE_REDIRECT_URI);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "https://www.googleapis.com/auth/meetings.space.created https://www.googleapis.com/auth/meetings.space.readonly");
-  url.searchParams.set("access_type", "offline");
-  redirect(url.toString());
+
+  try {
+    await requireAdmin();
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return redirectTo(request, "/login");
+    }
+    if (error instanceof ForbiddenError) {
+      return redirectTo(request, "/office");
+    }
+    throw error;
+  }
+
+  const state = crypto.randomUUID();
+  const url = buildGoogleMeetOAuthUrl(state);
+  if (!url) {
+    return redirectTo(request, "/admin/ops?google=setup-required");
+  }
+
+  const response = NextResponse.redirect(url);
+  response.cookies.set(GOOGLE_MEET_OAUTH_STATE_COOKIE, state, stateCookieOptions(request));
+  return response;
 }

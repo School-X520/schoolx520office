@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getGoogleMeetUrlForAccount } from "@/lib/video-meetings/join-url";
+import { getGoogleMeetUrlForAccount, normalizeGoogleMeetJoinUrl } from "@/lib/video-meetings/join-url";
 import { sanitizeVideoMeetingResponse } from "@/lib/video-meetings/permissions";
 
 describe("sanitizeVideoMeetingResponse", () => {
@@ -22,5 +22,13 @@ describe("getGoogleMeetUrlForAccount", () => {
 
   it("does not modify non-Google Meet URLs", () => {
     expect(getGoogleMeetUrlForAccount("https://example.com/meeting", "teacher@example.com")).toBe("https://example.com/meeting");
+  });
+});
+
+describe("normalizeGoogleMeetJoinUrl", () => {
+  it("normalizes generated Meet URLs before registration", () => {
+    expect(normalizeGoogleMeetJoinUrl("https://meet.google.com/ABC-DEFG-HIJ?authuser=0")).toBe(
+      "https://meet.google.com/abc-defg-hij",
+    );
   });
 });

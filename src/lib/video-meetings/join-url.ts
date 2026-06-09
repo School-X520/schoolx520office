@@ -1,6 +1,6 @@
 import type { VideoMeeting } from "@/types/domain";
 
-const GOOGLE_MEET_CODE_PATTERN = /^\/([a-z]{3}-[a-z]{4}-[a-z]{3})$/i;
+const GOOGLE_MEET_CODE_PATTERN = /^\/([a-z]+-[a-z]+-[a-z]+)$/i;
 const GOOGLE_MEET_HOST = "meet.google.com";
 
 export function normalizeGoogleMeetJoinUrl(input: string) {

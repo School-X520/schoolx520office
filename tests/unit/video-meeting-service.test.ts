@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mockUser } from "@/lib/mock-data";
 import { isActiveVideoMeeting, VIDEO_MEETING_ACTIVE_WINDOW_HOURS } from "@/lib/video-meetings/active";
 import { createVideoMeeting, joinVideoMeeting, registerVideoMeetingJoinUrl } from "@/lib/video-meetings/service";
@@ -13,6 +13,12 @@ function closeOpenMeetingRows(roomId: string) {
 }
 
 describe("video meeting service", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
   it("creates one live meeting per room and reuses it for later start attempts", async () => {
     closeOpenMeetingRows("meeting");
 
@@ -40,6 +46,51 @@ describe("video meeting service", () => {
     expect(mockStore.listVideoMeetings("meeting").filter((meeting) => meeting.status === "live")).toHaveLength(1);
     expect(mockStore.listVideoEvents(first.id).map((event) => event.eventType)).toEqual(
       expect.arrayContaining(["created", "live", "joined_intent"]),
+    );
+  });
+
+  it("auto-registers API-created Google Meet links", async () => {
+    closeOpenMeetingRows("meeting");
+    vi.stubEnv("GOOGLE_MEET_ENABLED", "true");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "client-id");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "client-secret");
+    vi.stubEnv("GOOGLE_REDIRECT_URI", "http://localhost:3000/api/integrations/google/callback");
+    vi.stubEnv("GOOGLE_REFRESH_TOKEN", "refresh-token");
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ access_token: "access-token", expires_in: 3600, token_type: "Bearer" }), {
+            status: 200,
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              name: "spaces/schoolx",
+              meetingUri: "https://meet.google.com/ABC-DEFG-HIJ?authuser=0",
+              meetingCode: "abc-defg-hij",
+            }),
+            { status: 200 },
+          ),
+        ),
+    );
+
+    const meeting = await createVideoMeeting(mockUser.userId, {
+      roomId: "meeting",
+      provider: "google_meet",
+      title: "자동 링크 회의",
+      consentRecording: false,
+      consentTranscript: false,
+      consentAiSummary: true,
+    });
+
+    expect(meeting.joinUrl).toBe("https://meet.google.com/abc-defg-hij");
+    expect(meeting.metadata.requiresJoinUrlRegistration).toBe(false);
+    expect(meeting.metadata.autoRegisteredJoinUrl).toBe(true);
+    expect(mockStore.listVideoEvents(meeting.id).map((event) => event.eventType)).toEqual(
+      expect.arrayContaining(["created", "live", "join_url_registered"]),
     );
   });
 

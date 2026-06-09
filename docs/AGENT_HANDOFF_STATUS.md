@@ -87,6 +87,7 @@ GOOGLE_MEET_ENABLED=false
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
+GOOGLE_REFRESH_TOKEN=
 
 ZOOM_ENABLED=false
 ZOOM_CLIENT_ID=
@@ -287,14 +288,14 @@ Implemented:
 
 - Video meeting schema and RLS
 - `google_meet` and `zoom` provider rows
-- Google Meet link-style provider skeleton
+- Google Meet provider with API-created meeting spaces when Google OAuth is connected
 - Zoom embed gating by flags
 - Meeting artifacts/events tables and APIs
 - Summary/artifact service skeletons
 
 Current limitations:
 
-- Google Meet API is not fully wired with real OAuth credentials.
+- Google Meet falls back to manual link registration when OAuth/token/API setup is unavailable.
 - Zoom embed is off unless both `ZOOM_ENABLED=true` and `NEXT_PUBLIC_ENABLE_ZOOM_EMBED=true`.
 - Meeting summary uses current app/agent flow and mock fallback unless provider integrations are completed.
 
@@ -338,10 +339,11 @@ Recommended next steps, in order:
    - event streaming
    - event persistence in `agent_run_events`
    - Memory Store writes through approved review flow
-8. Complete Google Meet provider:
-   - Google OAuth connection for meeting creation
-   - Meet space creation
-   - artifact import/sync
+8. Verify Google Meet provider in the target deployment:
+   - Run `0016_integration_tokens.sql`
+   - Connect Google from `/admin/ops`
+   - Start a meeting and confirm `video_meetings.join_url` is populated automatically
+   - Complete artifact import/sync
 9. Add/refresh E2E tests for real-mode redirects and admin UI. Avoid depending on a live Google OAuth browser login in CI; use mocks or controlled sessions.
 10. Before production, rotate secrets and update deployment env vars in Vercel or the chosen host.
 

@@ -10,6 +10,10 @@ SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
 ANTHROPIC_BETA_HEADER=managed-agents-2026-04-01
 APP_URL=http://localhost:3000
+GOOGLE_MEET_ENABLED=false
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=
 ```
 
 3. Create a Supabase project.
@@ -25,5 +29,6 @@ DO UPDATE SET is_active = true, is_admin = true;
 ```
 
 7. Configure Google OAuth in Supabase Auth.
+8. To auto-register Google Meet links, enable the Meet API in Google Cloud, set `GOOGLE_MEET_ENABLED=true`, set `GOOGLE_REDIRECT_URI` to `/api/integrations/google/callback`, then connect Google from `/admin/ops`.
 
 Mock mode is enabled by `NEXT_PUBLIC_USE_MOCK_DATA=true`; the app renders without external services.

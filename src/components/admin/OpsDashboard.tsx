@@ -1,6 +1,7 @@
-import { AlertTriangle, Bot, Database, ScrollText } from "lucide-react";
+import { AlertTriangle, Bot, Database, ScrollText, Video } from "lucide-react";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { StatusPill } from "@/components/layout/StatusPill";
+import { Button } from "@/components/ui/button";
 import type { AgentRun, AuditLog, MemoryWriteReview } from "@/types/domain";
 
 export function OpsDashboard({
@@ -26,6 +27,20 @@ export function OpsDashboard({
         <Metric icon={<Database className="size-4" />} label="requires_action" value={requiresAction.length} />
         <Metric icon={<ScrollText className="size-4" />} label="memory_review" value={memoryReviews.filter((review) => review.status === "pending").length} />
       </div>
+      <WarmCard>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold">Google Meet 자동 링크</p>
+            <p className="mt-1 text-sm text-pretty text-ink-soft">관리자 Google 계정을 연결하면 회의 시작 시 Meet 주소가 자동으로 등록됩니다.</p>
+          </div>
+          <Button asChild variant="secondary" className="w-full sm:w-fit">
+            <a href="/api/integrations/google/connect">
+              <Video className="size-4" />
+              Google 연결
+            </a>
+          </Button>
+        </div>
+      </WarmCard>
       <WarmCard>
         <p className="mb-3 text-sm font-semibold">최근 agent_runs</p>
         <div className="space-y-2">

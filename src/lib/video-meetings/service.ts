@@ -92,6 +92,23 @@ export async function createVideoMeeting(userId: string, input: CreateVideoMeeti
     actorUserId: userId,
     payload: { provider: input.provider },
   });
+  if (input.provider === "google_meet" && meeting.joinUrl && meeting.metadata.requiresJoinUrlRegistration !== true) {
+    const autoRegisteredAt = new Date().toISOString();
+    await source.addVideoEvent({
+      videoMeetingId: meeting.id,
+      roomId: input.roomId,
+      eventType: "join_url_registered",
+      actorUserId: userId,
+      payload: { joinUrl: meeting.joinUrl, automatic: true },
+    });
+    await auditVideoMeeting({
+      userId,
+      roomId: input.roomId,
+      action: "video_meeting.join_url_registered",
+      meetingId: meeting.id,
+      metadata: { joinUrlRegisteredAt: autoRegisteredAt, automatic: true },
+    });
+  }
 
   await source.createMessage({
     roomId: input.roomId,

@@ -57,6 +57,19 @@ type CreateDecisionInput = Pick<Decision, "roomId" | "title"> & Partial<Omit<Dec
 type CreateTaskInput = Pick<Task, "roomId" | "title"> &
   Partial<Omit<Task, "id" | "roomId" | "title" | "createdAt" | "updatedAt">>;
 type CreateAuditInput = Pick<AuditLog, "action"> & Partial<Omit<AuditLog, "id" | "createdAt">>;
+type IntegrationToken = {
+  provider: string;
+  refreshToken?: string | null;
+  accessToken?: string | null;
+  expiresAt?: string | null;
+  scope?: string | null;
+  tokenType?: string | null;
+  connectedBy?: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+type UpsertIntegrationTokenInput = Pick<IntegrationToken, "provider"> & Partial<Omit<IntegrationToken, "provider" | "createdAt" | "updatedAt">>;
 type CreateMemoryReviewInput = Pick<MemoryWriteReview, "roomId" | "proposedMemory"> &
   Partial<Omit<MemoryWriteReview, "id" | "createdAt">>;
 type CreatePendingMembershipInput = Pick<PendingRoomMembership, "email" | "roomId" | "role"> &
@@ -475,6 +488,21 @@ function auditFrom(rowValue: Record<string, unknown>): AuditLog {
     targetId: nullableText(rowValue.target_id),
     metadata: jsonObject(rowValue.metadata),
     createdAt: text(rowValue.created_at),
+  };
+}
+
+function integrationTokenFrom(rowValue: Record<string, unknown>): IntegrationToken {
+  return {
+    provider: text(rowValue.provider),
+    refreshToken: nullableText(rowValue.refresh_token),
+    accessToken: nullableText(rowValue.access_token),
+    expiresAt: nullableText(rowValue.expires_at),
+    scope: nullableText(rowValue.scope),
+    tokenType: nullableText(rowValue.token_type),
+    connectedBy: nullableText(rowValue.connected_by),
+    metadata: jsonObject(rowValue.metadata),
+    createdAt: text(rowValue.created_at),
+    updatedAt: text(rowValue.updated_at),
   };
 }
 
@@ -1749,6 +1777,30 @@ export const supabaseStore = {
   async listAuditLogs() {
     const { data, error } = await db().from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100);
     return rows(assertOk(data, error)).map(auditFrom);
+  },
+
+  async getIntegrationToken(provider: string) {
+    const { data, error } = await db().from("integration_tokens").select("*").eq("provider", provider).maybeSingle();
+    const result = row(assertOk(data, error));
+    return result ? integrationTokenFrom(result) : null;
+  },
+
+  async upsertIntegrationToken(input: UpsertIntegrationTokenInput) {
+    const { data, error } = await db()
+      .from("integration_tokens")
+      .upsert({
+        provider: input.provider,
+        refresh_token: input.refreshToken ?? null,
+        access_token: input.accessToken ?? null,
+        expires_at: input.expiresAt ?? null,
+        scope: input.scope ?? null,
+        token_type: input.tokenType ?? null,
+        connected_by: input.connectedBy ?? null,
+        metadata: input.metadata ?? {},
+      })
+      .select("*")
+      .single();
+    return integrationTokenFrom(row(assertOk(data, error))!);
   },
 
   async listMemoryReviews() {
