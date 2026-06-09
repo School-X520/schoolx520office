@@ -3,15 +3,18 @@
 import { useState, useTransition } from "react";
 import { Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getGoogleMeetUrlForAccount } from "@/lib/video-meetings/join-url";
 
 export function VideoMeetingJoinButton({
   meetingId,
   joinUrl,
+  accountEmail,
   label = "회의 참가",
   size = "sm",
 }: {
   meetingId: string;
   joinUrl: string;
+  accountEmail?: string | null;
   label?: string;
   size?: "sm" | "md";
 }) {
@@ -20,7 +23,12 @@ export function VideoMeetingJoinButton({
 
   function joinMeeting() {
     setError(null);
-    const meetingWindow = window.open("about:blank", "_blank", "noopener,noreferrer");
+    if (!joinUrl) {
+      setError("회의 참가 주소가 등록되어 있지 않습니다.");
+      return;
+    }
+
+    window.open(getGoogleMeetUrlForAccount(joinUrl, accountEmail), "_blank", "noopener,noreferrer");
     startTransition(async () => {
       try {
         const response = await fetch(`/api/video-meetings/${meetingId}/join`, { method: "POST" });
@@ -28,13 +36,7 @@ export function VideoMeetingJoinButton({
           const body = (await response.json()) as { error?: string };
           throw new Error(body.error ?? "회의 참가 기록을 남기지 못했습니다.");
         }
-        if (meetingWindow) {
-          meetingWindow.location.href = joinUrl;
-        } else {
-          window.open(joinUrl, "_blank", "noopener,noreferrer");
-        }
       } catch (joinError) {
-        meetingWindow?.close();
         setError(joinError instanceof Error ? joinError.message : "회의 참가에 실패했습니다.");
       }
     });

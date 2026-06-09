@@ -41,8 +41,8 @@ export function OfficeFloorPlan({
               <RoomCard key={room.id} room={room} agent={agentByRoom.get(room.id)} accessible={access.has(room.id)} />
             ))}
           </div>
-          <div className="grid min-h-0 gap-4 md:grid-cols-2">
-            {row(["province_research", "science_museum"]).map((room) => (
+          <div className="grid min-h-0 gap-4 md:grid-cols-3">
+            {row(["province_research", "gwangju_hanam_research", "science_museum"]).map((room) => (
               <RoomCard key={room.id} room={room} agent={agentByRoom.get(room.id)} accessible={access.has(room.id)} />
             ))}
           </div>

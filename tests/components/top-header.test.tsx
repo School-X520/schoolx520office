@@ -18,13 +18,14 @@ describe("TopHeader", () => {
     render(<TopHeader user={baseUser} />);
 
     expect(screen.queryByLabelText("관리")).not.toBeInTheDocument();
-    expect(screen.queryByText("Teacher")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("내 프로필 설정")).toBeInTheDocument();
+    expect(screen.getByText("Teacher")).toBeInTheDocument();
   });
 
   it("shows the settings menu for admin users", () => {
     render(<TopHeader user={{ ...baseUser, isAdmin: true }} />);
 
     expect(screen.getByLabelText("관리")).toBeInTheDocument();
-    expect(screen.queryByText("Teacher")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("내 프로필 설정")).toBeInTheDocument();
   });
 });

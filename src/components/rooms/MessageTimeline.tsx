@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { MessageBubble } from "@/components/rooms/MessageBubble";
-import type { Agent, MeetingImport, RoomMessage, SharedItem } from "@/types/domain";
+import type { Agent, MeetingImport, RoomMessage, SharedItem, UserProfile } from "@/types/domain";
 
 export function MessageTimeline({
   messages,
@@ -10,14 +10,20 @@ export function MessageTimeline({
   imports,
   currentUserId,
   agents,
+  memberProfiles,
   isMeeting,
+  cancellingAgentRunIds,
+  onCancelAgentRun,
 }: {
   messages: RoomMessage[];
   sharedItems: SharedItem[];
   imports: MeetingImport[];
   currentUserId: string;
   agents: Agent[];
+  memberProfiles: UserProfile[];
   isMeeting: boolean;
+  cancellingAgentRunIds?: Set<string>;
+  onCancelAgentRun?: (runId: string) => void;
 }) {
   const timelineRef = useRef<HTMLDivElement>(null);
   const lastMessageId = messages[messages.length - 1]?.id;
@@ -45,6 +51,9 @@ export function MessageTimeline({
             imports={imports}
             currentUserId={currentUserId}
             agents={agents}
+            memberProfiles={memberProfiles}
+            cancellingAgentRunIds={cancellingAgentRunIds}
+            onCancelAgentRun={onCancelAgentRun}
           />
         ))
       ) : (

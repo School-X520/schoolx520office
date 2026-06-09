@@ -4,12 +4,14 @@ import { mockStore } from "@/server/data/mock-store";
 import { getRoomView } from "@/server/rooms/get-room-view";
 
 describe("room decisions and tasks", () => {
-  it("hides inactive city research room and keeps renamed project rooms active", async () => {
+  it("hides inactive city research room and keeps project rooms active", async () => {
     const rooms = mockStore.listRooms();
 
     expect(rooms.map((room) => room.id)).not.toContain("city_research");
     expect(rooms.find((room) => room.id === "province_research")?.name).toBe("경기도교육연구회");
+    expect(rooms.find((room) => room.id === "gwangju_hanam_research")?.name).toBe("광주하남교육연구회");
     expect(rooms.find((room) => room.id === "science_museum")?.name).toBe("과학관 AI교육 연구회");
+    expect(mockStore.getAgentByRoom("gwangju_hanam_research")?.name).toBe("광주하남봇");
     await expect(getRoomView(mockUser.userId, "city_research")).resolves.toBeNull();
   });
 

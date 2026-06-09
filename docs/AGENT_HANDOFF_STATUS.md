@@ -8,7 +8,7 @@ This document summarizes the current implementation state of `School-X 교사연
 
 `School-X 교사연구회 AI Office` is a Next.js App Router application for a teacher research-group AI office.
 
-The office has 9 active rooms and 1 inactive placeholder room:
+The office has 10 active rooms and 1 inactive placeholder room:
 
 - `meeting`: 메인 회의방, no resident bot
 - `finance`: 재무
@@ -18,6 +18,7 @@ The office has 9 active rooms and 1 inactive placeholder room:
 - `research`: 연구
 - `promotion`: 홍보
 - `province_research`: 경기도교육연구회
+- `gwangju_hanam_research`: 광주하남교육연구회
 - `science_museum`: 과학관 AI교육 연구회
 - `city_research`: 비활성 프로젝트방, hidden until it is renamed and reused
 

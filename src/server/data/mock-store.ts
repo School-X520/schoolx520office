@@ -313,6 +313,24 @@ export const mockStore = {
     return [mockUser].find((profile) => profile.email.toLowerCase() === email.toLowerCase()) ?? null;
   },
 
+  updateUserProfile(
+    userId: string,
+    patch: {
+      displayName: string;
+      avatarUrl?: string | null;
+      bio?: string | null;
+    },
+  ) {
+    if (mockUser.userId !== userId) {
+      return null;
+    }
+    mockUser.displayName = patch.displayName;
+    mockUser.avatarUrl = patch.avatarUrl ?? null;
+    mockUser.bio = patch.bio ?? null;
+    mockUser.updatedAt = now();
+    return mockUser;
+  },
+
   listMemberships() {
     return seedMemberships;
   },

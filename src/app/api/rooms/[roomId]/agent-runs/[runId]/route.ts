@@ -1,5 +1,7 @@
 import { jsonError, jsonOk } from "@/lib/api";
 import { shouldUseMockData } from "@/lib/env";
+import { publicAgentRunActivity } from "@/server/agents/agent-run-activity";
+import { cancelAgentRun } from "@/server/agents/run-agent";
 import { requireRoomMember } from "@/server/auth/require-room-member";
 import { requireUser } from "@/server/auth/require-user";
 import { mockStore } from "@/server/data/mock-store";
@@ -23,8 +25,25 @@ export async function GET(_: Request, { params }: { params: Promise<{ roomId: st
     const outputMessage = run.outputMessageId
       ? (await source.listMessages(roomId, run.threadId)).find((message) => message.id === run.outputMessageId)
       : null;
+    const events = await source.listAgentRunEvents(runId);
 
-    return jsonOk({ run, outputMessage });
+    return jsonOk({ run, outputMessage, activity: publicAgentRunActivity(run, events) });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
+export async function DELETE(_: Request, { params }: { params: Promise<{ roomId: string; runId: string }> }) {
+  try {
+    const { roomId, runId } = await params;
+    const user = await requireUser();
+    const result = await cancelAgentRun({
+      userId: user.userId,
+      roomId,
+      runId,
+    });
+
+    return jsonOk(result);
   } catch (error) {
     return jsonError(error);
   }

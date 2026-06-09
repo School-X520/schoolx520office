@@ -2,6 +2,7 @@ import "server-only";
 
 import { shouldUseMockData } from "@/lib/env";
 import { AnthropicApiError } from "@/lib/anthropic/managed-agents-api";
+import { AGENT_RUN_PROGRESS_EVENT, agentRunProgressPayload } from "@/server/agents/agent-run-activity";
 import { getAgentAdapter } from "@/server/agents/get-agent-adapter";
 import { finalizeAgentRun } from "@/server/agents/finalize-agent-run";
 import { createRoomMessage } from "@/server/messages/room-message-service";
@@ -12,11 +13,13 @@ import {
 } from "@/server/memory/domain-memory-service";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
-import { requireRoomMember } from "@/server/auth/require-room-member";
+import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
+import { ForbiddenError } from "@/server/auth/errors";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
 import { getCoordinatorAgent, isCoordinatorAgent, isDevelopmentAgent } from "@/lib/agents/development-agent";
 import { generateCoordinatorBriefing } from "@/server/coordinator/coordinator-briefing-service";
 import type { AgentRun, AgentRunMode, AgentRunType, CoordinatorBriefing, RoomBriefing, RoomMessage } from "@/types/domain";
+import type { AgentStreamEvent } from "@/server/agents/types";
 
 type RunAgentInput = {
   userId: string;
@@ -47,9 +50,21 @@ type StartedAgentRun = {
   job: AgentRunJob;
 };
 
+const activeAgentRunControllers = new Map<string, AbortController>();
+const terminalAgentRunStatuses = new Set<AgentRun["status"]>(["completed", "failed", "cancelled"]);
+
+class AgentRunCancelledError extends Error {
+  constructor() {
+    super("봇 실행이 중단되었습니다.");
+    this.name = "AgentRunCancelledError";
+  }
+}
+
 function getSource() {
   return shouldUseMockData() ? mockStore : supabaseStore;
 }
+
+type AgentRunSource = ReturnType<typeof getSource>;
 
 export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentRun> {
   await requireRoomMember(input.userId, input.roomId);
@@ -109,6 +124,12 @@ export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentR
       : {},
   });
 
+  await recordProgress(source, run.id, {
+    key: "queued",
+    title: "실행 요청 접수",
+    detail: agent.name,
+  });
+
   return {
     run,
     inputMessage,
@@ -127,29 +148,69 @@ export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentR
 
 export async function completeAgentRun(job: AgentRunJob) {
   const source = getSource();
-  const runningRun = await source.updateAgentRun(job.runId, { status: "running" });
-  if (!runningRun) {
+  const existingRun = await getAgentRunById(source, job.runId);
+  if (!existingRun) {
     throw new Error("봇 실행을 찾을 수 없습니다.");
   }
+  if (terminalAgentRunStatuses.has(existingRun.status)) {
+    return { run: existingRun, outputMessage: null };
+  }
 
-  await source.addAuditLog({
-    actorUserId: job.userId,
-    actorAgentId: auditActorAgentId(job.agentId),
-    roomId: job.roomId,
-    action: "agent.run.started",
-    targetType: "agent_run",
-    targetId: job.runId,
-  });
+  const controller = new AbortController();
+  activeAgentRunControllers.set(job.runId, controller);
 
   try {
+    const runningRun = await source.updateAgentRun(job.runId, { status: "running" });
+    if (!runningRun) {
+      throw new Error("봇 실행을 찾을 수 없습니다.");
+    }
+    await recordProgress(source, job.runId, {
+      key: "started",
+      title: "실행 시작",
+      detail: "방 권한과 대화 맥락을 확인합니다.",
+    });
+
+    await source.addAuditLog({
+      actorUserId: job.userId,
+      actorAgentId: auditActorAgentId(job.agentId),
+      roomId: job.roomId,
+      action: "agent.run.started",
+      targetType: "agent_run",
+      targetId: job.runId,
+    });
+
+    await assertAgentRunActive(source, job.runId, controller.signal);
     const agent = await source.getAgent(job.agentId);
     if (isCoordinatorAgent(agent)) {
-      return completeCoordinatorAgentRun(job);
+      return completeCoordinatorAgentRun(job, controller.signal);
     }
 
     const adapter = getAgentAdapter();
+    await recordProgress(source, job.runId, {
+      key: "context",
+      title: "대화 맥락 정리",
+      detail: "최근 메시지와 방 요약을 읽고 있습니다.",
+    });
     const startupContext = await getRunStartupContext(job);
+    await assertAgentRunActive(source, job.runId, controller.signal);
+    await recordProgress(source, job.runId, {
+      key: "memory",
+      title: "장기 기억과 파일 확인",
+      detail: "연결 가능한 메모리와 방 파일을 준비합니다.",
+    });
     const memoryAttachments = await getRunMemoryAttachments(job);
+    await assertAgentRunActive(source, job.runId, controller.signal);
+    let emittedEventCount = 0;
+    const onEvent = async (event: AgentStreamEvent) => {
+      await assertAgentRunActive(source, job.runId, controller.signal);
+      emittedEventCount += 1;
+      await source.addAgentRunEvent(job.runId, event.type, event.payload);
+    };
+    await recordProgress(source, job.runId, {
+      key: "agent",
+      title: "봇에게 요청 전달",
+      detail: "Claude 세션에서 작업을 시작합니다.",
+    });
     const result = await adapter.run({
       agentRunId: job.runId,
       roomId: job.roomId,
@@ -161,12 +222,22 @@ export async function completeAgentRun(job: AgentRunJob) {
       guestSourceRoomId: job.guestSourceRoomId,
       startupContext,
       memoryAttachments,
+      signal: controller.signal,
+      onEvent,
     });
 
-    for (const event of result.events ?? []) {
-      await source.addAgentRunEvent(job.runId, event.type, event.payload);
+    await assertAgentRunActive(source, job.runId, controller.signal);
+    if (!emittedEventCount) {
+      for (const event of result.events ?? []) {
+        await source.addAgentRunEvent(job.runId, event.type, event.payload);
+      }
     }
 
+    await recordProgress(source, job.runId, {
+      key: "save_response",
+      title: "응답 저장",
+      detail: "채팅창에 표시할 봇 메시지를 저장합니다.",
+    });
     const outputMessage = await source.createMessage({
       roomId: job.roomId,
       threadId: job.threadId,
@@ -187,12 +258,19 @@ export async function completeAgentRun(job: AgentRunJob) {
       },
     });
 
+    await assertAgentRunActive(source, job.runId, controller.signal);
     const completedRun = await source.updateAgentRun(job.runId, {
       status: result.requiresAction ? "requires_action" : "completed",
       anthropicSessionId: result.anthropicSessionId ?? null,
       outputMessageId: outputMessage.id,
       tokenUsage: result.tokenUsage ?? {},
       endedAt: new Date().toISOString(),
+    });
+
+    await recordProgress(source, job.runId, {
+      key: "completed",
+      title: result.requiresAction ? "추가 조치 대기" : "응답 완료",
+      detail: result.requiresAction ? "봇이 추가 도구 결과를 기다리고 있습니다." : null,
     });
 
     await source.addAuditLog({
@@ -207,6 +285,18 @@ export async function completeAgentRun(job: AgentRunJob) {
     await finalizeAgentRun(job.runId);
     return { run: completedRun, outputMessage };
   } catch (error) {
+    if (await wasAgentRunCancelled(source, job.runId, controller.signal, error)) {
+      const cancelledRun = await markAgentRunCancelled(source, job, "user_cancelled");
+      await source.addAuditLog({
+        actorUserId: job.userId,
+        actorAgentId: auditActorAgentId(job.agentId),
+        roomId: job.roomId,
+        action: "agent.run.cancelled",
+        targetType: "agent_run",
+        targetId: job.runId,
+      });
+      return { run: cancelledRun, outputMessage: null };
+    }
     await source.updateAgentRun(job.runId, {
       status: "failed",
       error: agentRunErrorMessage(error),
@@ -222,15 +312,70 @@ export async function completeAgentRun(job: AgentRunJob) {
       metadata: { error: error instanceof Error ? error.message : error },
     });
     throw error;
+  } finally {
+    activeAgentRunControllers.delete(job.runId);
   }
 }
 
-async function completeCoordinatorAgentRun(job: AgentRunJob) {
+export async function cancelAgentRun(input: { userId: string; roomId: string; runId: string }) {
+  const membership = await requireRoomMember(input.userId, input.roomId);
+  if (!canWriteRoom(membership.role)) {
+    throw new ForbiddenError("봇 실행을 중단할 권한이 없습니다.");
+  }
+
+  const source = getSource();
+  const run = await getAgentRunById(source, input.runId);
+  if (!run || run.roomId !== input.roomId) {
+    const error = new Error("봇 실행을 찾을 수 없습니다.") as Error & { status: number };
+    error.status = 404;
+    throw error;
+  }
+  if (terminalAgentRunStatuses.has(run.status)) {
+    return { run, cancelled: false };
+  }
+
+  const cancelledAt = new Date().toISOString();
+  const updatedRun = await source.updateAgentRun(input.runId, {
+    status: "cancelled",
+    endedAt: cancelledAt,
+    error: null,
+    metadata: {
+      ...run.metadata,
+      cancelledAt,
+      cancelledBy: input.userId,
+    },
+  });
+  await recordProgress(source, input.runId, {
+    key: "cancelled",
+    title: "실행 중단됨",
+    detail: "사용자가 채팅창에서 중단했습니다.",
+  });
+  activeAgentRunControllers.get(input.runId)?.abort();
+  await source.addAuditLog({
+    actorUserId: input.userId,
+    roomId: input.roomId,
+    action: "agent.run.cancelled",
+    targetType: "agent_run",
+    targetId: input.runId,
+    metadata: { agentId: run.agentId, previousStatus: run.status },
+  });
+
+  return { run: updatedRun ?? run, cancelled: true };
+}
+
+async function completeCoordinatorAgentRun(job: AgentRunJob, signal: AbortSignal) {
   if (job.roomId !== "meeting") {
     throw new Error("총괄봇은 메인 회의방에서만 호출할 수 있습니다.");
   }
   const source = getSource();
+  await assertAgentRunActive(source, job.runId, signal);
+  await recordProgress(source, job.runId, {
+    key: "coordinator_briefing",
+    title: "방별 브리핑 종합",
+    detail: "총괄봇이 업무방 보고를 모으고 있습니다.",
+  });
   const snapshot = await generateCoordinatorBriefing({ userId: job.userId });
+  await assertAgentRunActive(source, job.runId, signal);
   const coordinatorAgent = getCoordinatorAgent();
   const content = formatCoordinatorBriefingMessage(snapshot.briefing, snapshot.roomBriefings);
 
@@ -250,6 +395,7 @@ async function completeCoordinatorAgentRun(job: AgentRunJob) {
     },
   });
 
+  await assertAgentRunActive(source, job.runId, signal);
   const completedRun = await source.updateAgentRun(job.runId, {
     status: "completed",
     outputMessageId: outputMessage.id,
@@ -260,6 +406,12 @@ async function completeCoordinatorAgentRun(job: AgentRunJob) {
       outputChars: content.length,
     },
     endedAt: new Date().toISOString(),
+  });
+
+  await recordProgress(source, job.runId, {
+    key: "completed",
+    title: "응답 완료",
+    detail: null,
   });
 
   await source.addAuditLog({
@@ -339,6 +491,77 @@ function textValue(value: unknown, fallback: string) {
 
 function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+async function recordProgress(
+  source: AgentRunSource,
+  agentRunId: string,
+  progress: { key: string; title: string; detail?: string | null },
+) {
+  await source.addAgentRunEvent(agentRunId, AGENT_RUN_PROGRESS_EVENT, agentRunProgressPayload(progress));
+}
+
+async function getAgentRunById(source: AgentRunSource, runId: string) {
+  return (await source.listAgentRuns()).find((item) => item.id === runId) ?? null;
+}
+
+async function assertAgentRunActive(source: AgentRunSource, runId: string, signal: AbortSignal) {
+  if (signal.aborted) {
+    throw new AgentRunCancelledError();
+  }
+
+  const run = await getAgentRunById(source, runId);
+  if (!run) {
+    throw new Error("봇 실행을 찾을 수 없습니다.");
+  }
+  if (run.status === "cancelled") {
+    throw new AgentRunCancelledError();
+  }
+  return run;
+}
+
+async function wasAgentRunCancelled(
+  source: AgentRunSource,
+  runId: string,
+  signal: AbortSignal,
+  error: unknown,
+) {
+  if (error instanceof AgentRunCancelledError) {
+    return true;
+  }
+  if (signal.aborted) {
+    return true;
+  }
+  return (await getAgentRunById(source, runId))?.status === "cancelled";
+}
+
+async function markAgentRunCancelled(source: AgentRunSource, job: AgentRunJob, reason: string) {
+  const run = await getAgentRunById(source, job.runId);
+  if (!run) {
+    throw new Error("봇 실행을 찾을 수 없습니다.");
+  }
+  if (run.status === "cancelled" || terminalAgentRunStatuses.has(run.status)) {
+    return run;
+  }
+
+  const cancelledAt = new Date().toISOString();
+  const updatedRun = await source.updateAgentRun(job.runId, {
+    status: "cancelled",
+    endedAt: cancelledAt,
+    error: null,
+    metadata: {
+      ...run.metadata,
+      cancelledAt,
+      cancelledBy: job.userId,
+      cancellationReason: reason,
+    },
+  });
+  await recordProgress(source, job.runId, {
+    key: "cancelled",
+    title: "실행 중단됨",
+    detail: "사용자가 채팅창에서 중단했습니다.",
+  });
+  return updatedRun ?? run;
 }
 
 export async function runAgent(input: RunAgentInput) {

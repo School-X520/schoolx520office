@@ -39,10 +39,10 @@ export function RoomWorkspace({ view, user }: { view: RoomViewModel; user: UserP
                 </div>
               </div>
             </div>
-            <MemberAvatarStack users={[user]} />
+            <MemberAvatarStack users={view.memberProfiles.length ? view.memberProfiles : [user]} />
           </div>
         </div>
-        {isMeeting ? <ActiveVideoMeetingBanner meeting={view.activeMeeting} /> : null}
+        {isMeeting ? <ActiveVideoMeetingBanner meeting={view.activeMeeting} accountEmail={user.email} /> : null}
         <section className="motion-continuity-enter motion-stagger-1 overflow-hidden rounded-lg border border-line bg-card shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
             <div>
@@ -65,6 +65,7 @@ export function RoomWorkspace({ view, user }: { view: RoomViewModel; user: UserP
             residentAgent={view.agent}
             guestAgents={view.guestAgents ?? []}
             initialMessages={view.messages}
+            memberProfiles={view.memberProfiles}
             sharedItems={view.sharedItems}
             imports={view.imports}
           />
@@ -72,7 +73,11 @@ export function RoomWorkspace({ view, user }: { view: RoomViewModel; user: UserP
         <WarmCard className="motion-continuity-enter motion-stagger-2">
           <p className="text-sm text-pretty text-ink-soft">{view.room.description}</p>
         </WarmCard>
-        {isMeeting ? <div className="motion-continuity-enter motion-stagger-3"><VideoMeetingPanel activeMeeting={view.activeMeeting} /></div> : null}
+        {isMeeting ? (
+          <div className="motion-continuity-enter motion-stagger-3">
+            <VideoMeetingPanel activeMeeting={view.activeMeeting} accountEmail={user.email} />
+          </div>
+        ) : null}
       </section>
       <RoomRightPanel
         roomId={view.room.id}

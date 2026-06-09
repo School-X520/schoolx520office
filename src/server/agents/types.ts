@@ -29,6 +29,8 @@ export type AgentRunInput = {
   guestSourceRoomId?: string | null;
   startupContext?: Record<string, unknown>;
   memoryAttachments?: AgentMemoryAttachment[];
+  signal?: AbortSignal;
+  onEvent?: (event: AgentStreamEvent) => void | Promise<void>;
 };
 
 export type AgentRunResult = {

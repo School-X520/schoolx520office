@@ -2,9 +2,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FileList } from "@/components/files/FileList";
+import { OfficeFloorPlan } from "@/components/office/OfficeFloorPlan";
 import { RoomCard } from "@/components/office/RoomCard";
 import { SharedItemCard } from "@/components/meeting/SharedItemCard";
 import { MeetingImportCard } from "@/components/meeting/MeetingImportCard";
+import { agents, memberships, rooms } from "@/lib/mock-data";
 import type { FileRecord, MeetingImport, Room, SharedItem } from "@/types/domain";
 
 afterEach(() => {
@@ -27,6 +29,20 @@ describe("cards", () => {
     };
     render(<RoomCard room={room} accessible />);
     expect(screen.getByText("메인 회의방")).toBeInTheDocument();
+  });
+
+  it("places the Gwangju-Hanam project room between Gyeonggi and Science Museum rooms", () => {
+    render(<OfficeFloorPlan rooms={rooms.filter((room) => room.isActive)} agents={agents} memberships={memberships} />);
+
+    const roomLinks = screen.getAllByRole("link").map((link) => link.textContent ?? "");
+    const provinceIndex = roomLinks.findIndex((text) => text.includes("경기도교육연구회"));
+    const gwangjuHanamIndex = roomLinks.findIndex((text) => text.includes("광주하남교육연구회"));
+    const scienceMuseumIndex = roomLinks.findIndex((text) => text.includes("과학관 AI교육 연구회"));
+
+    expect(provinceIndex).toBeGreaterThanOrEqual(0);
+    expect(gwangjuHanamIndex).toBeGreaterThan(provinceIndex);
+    expect(scienceMuseumIndex).toBeGreaterThan(gwangjuHanamIndex);
+    expect(screen.getByText("광주하남봇 대기 중")).toBeInTheDocument();
   });
 
   it("renders shared and import cards", () => {

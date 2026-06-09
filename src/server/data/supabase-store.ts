@@ -249,6 +249,7 @@ function userProfileFrom(rowValue: Record<string, unknown>): UserProfile {
     email: text(rowValue.email),
     displayName: text(rowValue.display_name, text(rowValue.email)),
     avatarUrl: nullableText(rowValue.avatar_url),
+    bio: nullableText(rowValue.bio),
     isAdmin: bool(rowValue.is_admin),
     createdAt: text(rowValue.created_at),
     updatedAt: text(rowValue.updated_at),
@@ -367,6 +368,17 @@ function agentRunFrom(rowValue: Record<string, unknown>): AgentRun {
     startedAt: text(rowValue.started_at),
     endedAt: nullableText(rowValue.ended_at),
     metadata: jsonObject(rowValue.metadata),
+  };
+}
+
+function agentRunEventFrom(rowValue: Record<string, unknown>): AgentRunEvent {
+  return {
+    id: text(rowValue.id),
+    agentRunId: text(rowValue.agent_run_id),
+    anthropicEventId: nullableText(rowValue.anthropic_event_id),
+    eventType: text(rowValue.event_type),
+    payload: jsonObject(rowValue.payload),
+    createdAt: text(rowValue.created_at),
   };
 }
 
@@ -842,13 +854,15 @@ export const supabaseStore = {
       .eq("user_id", input.userId)
       .maybeSingle();
     const existing = row(assertOk(existingResult.data, existingResult.error));
+    const existingDisplayName = existing ? nullableText(existing.display_name) : null;
+    const existingAvatarUrl = existing ? nullableText(existing.avatar_url) : null;
     const { data, error } = await db()
       .from("user_profiles")
       .upsert({
         user_id: input.userId,
         email: input.email.toLowerCase(),
-        display_name: input.displayName,
-        avatar_url: input.avatarUrl ?? null,
+        display_name: existingDisplayName ?? input.displayName,
+        avatar_url: existing ? existingAvatarUrl : input.avatarUrl ?? null,
         is_admin: bool(existing?.is_admin) || Boolean(input.isAdmin),
       })
       .select("*")
@@ -856,6 +870,28 @@ export const supabaseStore = {
     const profile = userProfileFrom(row(assertOk(data, error))!);
     await this.applyPendingRoomMemberships(profile.email, profile.userId).catch(() => null);
     return profile;
+  },
+
+  async updateUserProfile(
+    userId: string,
+    patch: {
+      displayName: string;
+      avatarUrl?: string | null;
+      bio?: string | null;
+    },
+  ) {
+    const { data, error } = await db()
+      .from("user_profiles")
+      .update({
+        display_name: patch.displayName,
+        avatar_url: patch.avatarUrl ?? null,
+        bio: patch.bio ?? null,
+      })
+      .eq("user_id", userId)
+      .select("*")
+      .maybeSingle();
+    const result = row(assertOk(data, error));
+    return result ? userProfileFrom(result) : null;
   },
 
   async upsertMembership(input: {
@@ -1416,15 +1452,16 @@ export const supabaseStore = {
       .insert({ agent_run_id: agentRunId, event_type: eventType, payload })
       .select("*")
       .single();
-    const result = row(assertOk(data, error))!;
-    return {
-      id: text(result.id),
-      agentRunId: text(result.agent_run_id),
-      anthropicEventId: nullableText(result.anthropic_event_id),
-      eventType: text(result.event_type),
-      payload: jsonObject(result.payload),
-      createdAt: text(result.created_at),
-    } satisfies AgentRunEvent;
+    return agentRunEventFrom(row(assertOk(data, error))!);
+  },
+
+  async listAgentRunEvents(agentRunId?: string) {
+    let query = db().from("agent_run_events").select("*").order("created_at", { ascending: true });
+    if (agentRunId) {
+      query = query.eq("agent_run_id", agentRunId);
+    }
+    const { data, error } = await query;
+    return rows(assertOk(data, error)).map(agentRunEventFrom);
   },
 
   async listSharedItems(roomId?: string) {

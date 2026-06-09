@@ -48,7 +48,7 @@ ANTHROPIC_ENVIRONMENT_ID=
 pnpm agents:provision --dry-run
 ```
 
-출력에서 아래 9개 봇이 보여야 한다.
+출력에서 아래 9개 활성 업무방 봇이 보여야 한다.
 
 - `finance_bot`
 - `planning_bot`
@@ -56,8 +56,8 @@ pnpm agents:provision --dry-run
 - `development_bot`
 - `research_bot`
 - `promotion_bot`
-- `city_research_bot`
 - `province_research_bot`
+- `gwangju_hanam_research_bot`
 - `science_museum_bot`
 
 ## 4. 실제 생성
@@ -69,7 +69,7 @@ pnpm agents:provision
 스크립트가 수행하는 일:
 
 1. Anthropic cloud environment 1개를 만든다.
-2. 업무방별 Claude Managed Agent 9개를 만든다.
+2. 활성 업무방별 Claude Managed Agent 9개를 만든다.
 3. Supabase `agents` 테이블에 `anthropic_agent_id`, `anthropic_environment_id`를 저장한다.
 
 이미 DB에 `anthropic_agent_id`가 있으면 건너뛴다. 다시 만들려면:

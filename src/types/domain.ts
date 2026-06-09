@@ -99,6 +99,7 @@ export type UserProfile = {
   email: string;
   displayName: string;
   avatarUrl?: string | null;
+  bio?: string | null;
   isAdmin: boolean;
   createdAt: string;
   updatedAt: string;
@@ -219,6 +220,16 @@ export type AgentRunEvent = {
   anthropicEventId?: string | null;
   eventType: string;
   payload: JsonObject;
+  createdAt: string;
+};
+
+export type AgentRunActivityStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+
+export type AgentRunActivity = {
+  id: string;
+  title: string;
+  detail?: string | null;
+  status: AgentRunActivityStatus;
   createdAt: string;
 };
 
@@ -403,6 +414,7 @@ export type RoomViewModel = {
   threads: RoomThread[];
   activeThread: RoomThread;
   messages: RoomMessage[];
+  memberProfiles: UserProfile[];
   files: FileRecord[];
   sharedItems: SharedItem[];
   imports: MeetingImport[];

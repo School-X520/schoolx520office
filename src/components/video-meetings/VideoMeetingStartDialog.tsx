@@ -7,10 +7,10 @@ import { Dialog } from "@/components/ui/dialog";
 import { TextArea, TextInput } from "@/components/ui/form-controls";
 import { VideoMeetingProviderPicker } from "@/components/video-meetings/VideoMeetingProviderPicker";
 import { VideoMeetingConsentOptions } from "@/components/video-meetings/VideoMeetingConsentOptions";
-import { getVideoMeetingOpenUrl, isRegisteredVideoMeetingJoinUrl } from "@/lib/video-meetings/join-url";
+import { getGoogleMeetUrlForAccount, getVideoMeetingOpenUrl, isRegisteredVideoMeetingJoinUrl } from "@/lib/video-meetings/join-url";
 import type { VideoMeeting } from "@/types/domain";
 
-export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
+export function VideoMeetingStartDialog({ compact, accountEmail }: { compact?: boolean; accountEmail?: string | null }) {
   const [title, setTitle] = useState("5월 정기 회의");
   const [description, setDescription] = useState("메인 회의방 화상회의");
   const [provider, setProvider] = useState<"google_meet" | "zoom">("google_meet");
@@ -22,7 +22,12 @@ export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
 
   function createMeeting() {
     setError(null);
-    const meetingWindow = window.open("about:blank", "_blank", "noopener,noreferrer");
+    const meetingWindow = window.open("about:blank", "_blank");
+    if (meetingWindow) {
+      meetingWindow.opener = null;
+      meetingWindow.document.title = "화상회의 준비 중";
+      meetingWindow.document.body.textContent = "화상회의 창을 준비 중입니다.";
+    }
     startTransition(async () => {
       const response = await fetch("/api/video-meetings", {
         method: "POST",
@@ -44,7 +49,7 @@ export function VideoMeetingStartDialog({ compact }: { compact?: boolean }) {
         return;
       }
       const body = (await response.json()) as { meeting: VideoMeeting };
-      const openUrl = body.meeting.joinUrl ?? getVideoMeetingOpenUrl(body.meeting);
+      const openUrl = getGoogleMeetUrlForAccount(body.meeting.joinUrl ?? getVideoMeetingOpenUrl(body.meeting), accountEmail);
       if (openUrl) {
         if (meetingWindow) {
           meetingWindow.location.href = openUrl;

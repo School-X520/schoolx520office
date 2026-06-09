@@ -62,6 +62,9 @@ describe("coordinator briefing", () => {
       guestSourceRoomId: "meeting",
     });
 
+    if (!completed.outputMessage) {
+      throw new Error("총괄봇 응답 메시지를 생성하지 못했습니다.");
+    }
     expect(completed.outputMessage.content).toContain("총괄 브리핑");
     expect(completed.outputMessage.metadata).toMatchObject({ guestLabel: "총괄봇" });
   });

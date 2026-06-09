@@ -6,6 +6,7 @@ import {
   type ManagedAgentEvent,
   type ManagedSessionResource,
 } from "@/lib/anthropic/managed-agents-api";
+import { AGENT_RUN_PROGRESS_EVENT, agentRunProgressPayload } from "@/server/agents/agent-run-activity";
 import type { AgentAdapter } from "@/server/agents/types";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
@@ -26,6 +27,11 @@ export class RealClaudeManagedAgentAdapter implements AgentAdapter {
     const source = shouldUseMockData() ? mockStore : supabaseStore;
     const agent = await source.getAgent(input.agentId);
     if (!agent?.anthropicAgentId || !agent.anthropicEnvironmentId) {
+      await emitProgress(input, {
+        key: "setup_required",
+        title: "Claude 연결 확인 필요",
+        detail: "Managed Agents 리소스가 아직 연결되지 않았습니다.",
+      });
       return {
         content: "Claude Managed Agents 리소스가 아직 연결되지 않았습니다. `pnpm agents:provision`으로 봇 ID를 먼저 생성해 주세요.",
         anthropicSessionId: null,
@@ -51,35 +57,61 @@ export class RealClaudeManagedAgentAdapter implements AgentAdapter {
 
     const client = getManagedAgentsClientFromEnv();
     const controller = new AbortController();
+    const abortFromInput = () => controller.abort();
+    if (input.signal?.aborted) {
+      controller.abort();
+    } else {
+      input.signal?.addEventListener("abort", abortFromInput, { once: true });
+    }
     const timeout = windowlessTimeout(() => controller.abort(), STREAM_TIMEOUT_MS);
     const events: ManagedAgentEvent[] = [];
-    const preparedFiles = await safePrepareMountedFiles(input, events);
-    const sessionResult = await createSessionWithFileFallback({
-      client,
-      agent: connectedAgent,
-      input,
-      mountedFiles: preparedFiles,
-      events,
-    });
-    const { session, mountedFiles } = sessionResult;
-
-    events.push({
-      type: "schoolx.files_mounted",
-      files: mountedFiles.map((file) => ({
-        roomId: file.roomId,
-        fileId: file.fileId,
-        originalName: file.originalName,
-        mimeType: file.mimeType,
-        sizeBytes: file.sizeBytes,
-        mountPath: file.mountPath,
-        anthropicFileId: file.anthropicFileId,
-      })),
-    });
-
-    let streamResponse: Response | null = null;
 
     try {
+      assertNotAborted(controller.signal);
+      await emitProgress(input, {
+        key: "file_prepare",
+        title: "방 파일 준비",
+        detail: "참고할 수 있는 방 파일을 확인합니다.",
+      });
+      const preparedFiles = await safePrepareMountedFiles(input, events);
+      assertNotAborted(controller.signal);
+      await emitProgress(input, {
+        key: "session",
+        title: "Claude 세션 준비",
+        detail: connectedAgent.name,
+      });
+      const sessionResult = await createSessionWithFileFallback({
+        client,
+        agent: connectedAgent,
+        input,
+        mountedFiles: preparedFiles,
+        events,
+      });
+      const { session, mountedFiles } = sessionResult;
+
+      const filesMountedEvent = {
+        type: "schoolx.files_mounted",
+        files: mountedFiles.map((file) => ({
+          roomId: file.roomId,
+          fileId: file.fileId,
+          originalName: file.originalName,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+          mountPath: file.mountPath,
+          anthropicFileId: file.anthropicFileId,
+        })),
+      };
+      events.push(filesMountedEvent);
+      await emitManagedEvent(input, filesMountedEvent);
+      await emitProgress(input, {
+        key: "files_mounted",
+        title: "참고 파일 연결",
+        detail: mountedFiles.length ? `${mountedFiles.length}개 파일을 세션에 연결했습니다.` : "연결할 파일이 없습니다.",
+      });
+
+      let streamResponse: Response | null = null;
       streamResponse = await client.openEventStream(session.id, controller.signal);
+      assertNotAborted(controller.signal);
       await client.sendUserMessage(
         session.id,
         formatManagedAgentPrompt(
@@ -90,6 +122,11 @@ export class RealClaudeManagedAgentAdapter implements AgentAdapter {
           sessionResult.memoryMountError,
         ),
       );
+      await emitProgress(input, {
+        key: "prompt_sent",
+        title: "요청 전달",
+        detail: "봇이 작업을 시작했습니다.",
+      });
       const streamed = await readEventStream(streamResponse, controller.signal, async (blockingEvents) => {
         const toolResultEvents: ManagedAgentEvent[] = [];
         for (const event of blockingEvents) {
@@ -100,7 +137,9 @@ export class RealClaudeManagedAgentAdapter implements AgentAdapter {
             throw new Error("Malformed custom tool use event.");
           }
 
+          assertNotAborted(controller.signal);
           const result = await executeTool(input.agentRunId, event.name, event.input ?? {});
+          assertNotAborted(controller.signal);
           await client.sendCustomToolResult(session.id, event.id, JSON.stringify(result));
           toolResultEvents.push({
             type: "schoolx.custom_tool_result",
@@ -108,30 +147,46 @@ export class RealClaudeManagedAgentAdapter implements AgentAdapter {
             name: event.name,
             result,
           });
+          await emitProgress(input, {
+            key: `tool-result-${event.id}`,
+            title: "도구 결과 반영",
+            detail: friendlyToolName(event.name),
+          });
         }
         return toolResultEvents;
+      }, async (event) => {
+        await emitManagedEvent(input, event);
+        await emitProgressForManagedEvent(input, event);
       });
       events.push(...streamed);
+
+      const content = extractAgentText(events).trim();
+      const finalIdleEvent = [...events].reverse().find((event) => event.type === "session.status_idle");
+      const requiresAction = finalIdleEvent?.stop_reason?.type === "requires_action";
+      const generatedFiles = requiresAction ? [] : await safeImportGeneratedFiles(input, session.id, events, mountedFiles);
+      if (generatedFiles.length) {
+        await emitProgress(input, {
+          key: "generated_files",
+          title: "생성 파일 저장",
+          detail: `${generatedFiles.length}개 파일을 방 파일함에 저장했습니다.`,
+        });
+      }
+
+      return {
+        content: content || "응답이 비어 있습니다. Claude Console의 session event stream을 확인해 주세요.",
+        anthropicSessionId: session.id,
+        tokenUsage: extractUsage(events),
+        events: events.map((event) => ({
+          type: event.type ?? "managed_agent.event",
+          payload: sanitizeEvent(event),
+        })),
+        generatedFiles,
+        requiresAction,
+      };
     } finally {
       clearTimeout(timeout);
+      input.signal?.removeEventListener("abort", abortFromInput);
     }
-
-    const content = extractAgentText(events).trim();
-    const finalIdleEvent = [...events].reverse().find((event) => event.type === "session.status_idle");
-    const requiresAction = finalIdleEvent?.stop_reason?.type === "requires_action";
-    const generatedFiles = requiresAction ? [] : await safeImportGeneratedFiles(input, session.id, events, mountedFiles);
-
-    return {
-      content: content || "응답이 비어 있습니다. Claude Console의 session event stream을 확인해 주세요.",
-      anthropicSessionId: session.id,
-      tokenUsage: extractUsage(events),
-      events: events.map((event) => ({
-        type: event.type ?? "managed_agent.event",
-        payload: sanitizeEvent(event),
-      })),
-      generatedFiles,
-      requiresAction,
-    };
   }
 }
 
@@ -425,6 +480,7 @@ async function readEventStream(
   response: Response,
   signal: AbortSignal,
   onRequiresAction?: (blockingEvents: ManagedAgentEvent[]) => Promise<ManagedAgentEvent[]>,
+  onEvent?: (event: ManagedAgentEvent) => Promise<void>,
 ) {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -456,6 +512,7 @@ async function readEventStream(
       if (event.id) {
         eventsById.set(event.id, event);
       }
+      await onEvent?.(event);
       if (event.type === "session.status_idle" && event.stop_reason?.type === "requires_action") {
         const blockingIds = event.stop_reason.event_ids ?? [];
         const pendingIds = blockingIds.filter((eventId) => !handledActionIds.has(eventId));
@@ -474,6 +531,9 @@ async function readEventStream(
         const toolResultEvents = await onRequiresAction(blockingEvents as ManagedAgentEvent[]);
         pendingIds.forEach((eventId) => handledActionIds.add(eventId));
         events.push(...toolResultEvents);
+        for (const toolResultEvent of toolResultEvents) {
+          await onEvent?.(toolResultEvent);
+        }
         continue;
       }
       if (event.type === "session.status_idle") {
@@ -522,6 +582,80 @@ function extractUsage(events: ManagedAgentEvent[]) {
 
 function sanitizeEvent(event: ManagedAgentEvent): Record<string, unknown> {
   return JSON.parse(JSON.stringify(event)) as Record<string, unknown>;
+}
+
+async function emitManagedEvent(input: AgentRunInput, event: ManagedAgentEvent) {
+  await input.onEvent?.({
+    type: event.type ?? "managed_agent.event",
+    payload: sanitizeEvent(event),
+  });
+}
+
+async function emitProgress(
+  input: AgentRunInput,
+  progress: { key: string; title: string; detail?: string | null },
+) {
+  await input.onEvent?.({
+    type: AGENT_RUN_PROGRESS_EVENT,
+    payload: agentRunProgressPayload(progress),
+  });
+}
+
+async function emitProgressForManagedEvent(input: AgentRunInput, event: ManagedAgentEvent) {
+  const progress = progressForManagedEvent(event);
+  if (progress) {
+    await emitProgress(input, progress);
+  }
+}
+
+function progressForManagedEvent(event: ManagedAgentEvent) {
+  if (event.type === "agent.message") {
+    return {
+      key: "answer",
+      title: "응답 작성",
+      detail: "사용자에게 보낼 답변을 정리하고 있습니다.",
+    };
+  }
+  if (event.type === "agent.custom_tool_use" || event.type === "agent.tool_use") {
+    return {
+      key: `tool-${event.id ?? event.name ?? crypto.randomUUID()}`,
+      title: "도구 실행",
+      detail: friendlyToolName(event.name),
+    };
+  }
+  if (event.type === "session.status_idle") {
+    return {
+      key: "session_idle",
+      title: event.stop_reason?.type === "requires_action" ? "추가 도구 결과 대기" : "작업 정리",
+      detail: null,
+    };
+  }
+  return null;
+}
+
+function friendlyToolName(name: unknown) {
+  if (typeof name !== "string" || !name) {
+    return "도구 이름을 확인하지 못했습니다.";
+  }
+
+  const labels: Record<string, string> = {
+    search_room_messages: "방 메시지 검색",
+    read_room_file: "방 파일 읽기",
+    list_room_files: "방 파일 목록 확인",
+    share_item_to_meeting: "회의방 공유",
+    import_meeting_item_to_room: "회의방 항목 가져오기",
+    create_decision: "결정사항 기록",
+    create_task_from_decision: "할 일 생성",
+    propose_memory_update: "장기 기억 제안",
+    write: "파일 작성",
+  };
+  return labels[name] ?? name;
+}
+
+function assertNotAborted(signal: AbortSignal) {
+  if (signal.aborted) {
+    throw new Error("봇 실행이 중단되었습니다.");
+  }
 }
 
 function windowlessTimeout(callback: () => void, ms: number) {

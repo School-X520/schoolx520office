@@ -37,7 +37,7 @@ export default async function OfficePage() {
       memberships={view.memberships}
       showSidebar={false}
       fitViewport
-      right={<MeetingSidePanel sharedItems={sharedItems} activeMeeting={activeMeeting} operationStatus={operationStatus} />}
+      right={<MeetingSidePanel sharedItems={sharedItems} activeMeeting={activeMeeting} operationStatus={operationStatus} accountEmail={user.email} />}
     >
       <OfficeFloorPlan rooms={view.rooms} agents={view.agents} memberships={view.memberships} />
     </AppShell>

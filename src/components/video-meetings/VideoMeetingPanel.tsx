@@ -15,9 +15,11 @@ import type { VideoMeeting } from "@/types/domain";
 
 export function VideoMeetingPanel({
   activeMeeting,
+  accountEmail,
   compact,
 }: {
   activeMeeting?: VideoMeeting | null;
+  accountEmail?: string | null;
   compact?: boolean;
 }) {
   const [currentMeeting, setCurrentMeeting] = useState<VideoMeeting | null>(activeMeeting ?? null);
@@ -70,7 +72,7 @@ export function VideoMeetingPanel({
           <p className="mt-1 text-xs text-ink-soft">{currentMeeting.provider === "google_meet" ? "Google Meet" : "Zoom"}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {isRegisteredVideoMeetingJoinUrl(currentMeeting) ? (
-              <VideoMeetingJoinButton meetingId={currentMeeting.id} joinUrl={currentMeeting.joinUrl ?? ""} />
+              <VideoMeetingJoinButton meetingId={currentMeeting.id} joinUrl={currentMeeting.joinUrl ?? ""} accountEmail={accountEmail} />
             ) : null}
             <VideoMeetingEndButton meetingId={currentMeeting.id} onEnded={() => setCurrentMeeting(null)} />
             <Button asChild size="sm" variant="secondary">
@@ -88,7 +90,7 @@ export function VideoMeetingPanel({
         </div>
       ) : (
         <div className="mt-4">
-          <VideoMeetingStartDialog compact={compact} />
+          <VideoMeetingStartDialog compact={compact} accountEmail={accountEmail} />
         </div>
       )}
     </WarmCard>

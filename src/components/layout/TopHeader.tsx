@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ShieldCheck, LogOut, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ProfileSettingsDialog } from "@/components/layout/ProfileSettingsDialog";
 import { StatusPill } from "@/components/layout/StatusPill";
 import type { UserProfile } from "@/types/domain";
 
@@ -17,6 +18,7 @@ export function TopHeader({ user }: { user: UserProfile }) {
             <ShieldCheck className="size-3.5" />
             Google 인증 사용자
           </StatusPill>
+          <ProfileSettingsDialog user={user} />
           {user.isAdmin ? <StatusPill tone="terracotta">승인</StatusPill> : null}
           {user.isAdmin ? (
             <Button asChild variant="ghost" size="icon" className="text-white hover:bg-white/10" aria-label="관리">

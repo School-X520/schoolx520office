@@ -287,6 +287,9 @@ export async function summarizeVideoMeeting(userId: string, meetingId: string) {
     mode: "finalizer",
     runType: "video_meeting_summary",
   });
+  if (!result.outputMessage) {
+    throw new Error("회의 요약 메시지를 생성하지 못했습니다.");
+  }
   const artifact = await addVideoMeetingArtifact(userId, meetingId, {
     artifactType: "ai_summary",
     title: `${meeting.title} AI 회의 요약`,

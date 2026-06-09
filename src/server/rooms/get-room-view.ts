@@ -47,6 +47,8 @@ export async function getRoomView(userId: string, roomId: string, options: { thr
     imports,
     decisions,
     tasks,
+    roomMemberships,
+    profiles,
   ] = await Promise.all([
     source.listRooms(),
     source.getAgentByRoom(roomId),
@@ -59,7 +61,18 @@ export async function getRoomView(userId: string, roomId: string, options: { thr
     source.listImports(roomId),
     source.listDecisions("meeting"),
     source.listTasks(roomId),
+    source.listMemberships(),
+    source.listUserProfiles(),
   ]);
+  const visibleUserIds = new Set(
+    roomMemberships.filter((item) => item.roomId === roomId).map((item) => item.userId),
+  );
+  messages.forEach((message) => {
+    if (message.senderUserId) {
+      visibleUserIds.add(message.senderUserId);
+    }
+  });
+  const memberProfiles = profiles.filter((profile) => visibleUserIds.has(profile.userId));
   const developmentAgent = agents.find(isDevelopmentAgent);
   const coordinatorAgent = getCoordinatorAgent();
   const guestAgents =
@@ -89,6 +102,7 @@ export async function getRoomView(userId: string, roomId: string, options: { thr
     threads: threads.length ? threads : [activeThread],
     activeThread,
     messages,
+    memberProfiles,
     files,
     sharedItems: sharedItemsWithRoomNames,
     imports,

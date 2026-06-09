@@ -6,7 +6,13 @@ import { VideoMeetingJoinButton } from "@/components/video-meetings/VideoMeeting
 import { VideoMeetingJoinUrlForm } from "@/components/video-meetings/VideoMeetingJoinUrlForm";
 import type { VideoMeeting } from "@/types/domain";
 
-export function ActiveVideoMeetingBanner({ meeting }: { meeting?: VideoMeeting | null }) {
+export function ActiveVideoMeetingBanner({
+  meeting,
+  accountEmail,
+}: {
+  meeting?: VideoMeeting | null;
+  accountEmail?: string | null;
+}) {
   if (!meeting) {
     return null;
   }
@@ -24,7 +30,7 @@ export function ActiveVideoMeetingBanner({ meeting }: { meeting?: VideoMeeting |
       <div className="flex flex-wrap items-center gap-2">
         <StatusPill tone="live">진행 중</StatusPill>
         {isRegisteredVideoMeetingJoinUrl(meeting) ? (
-          <VideoMeetingJoinButton meetingId={meeting.id} joinUrl={meeting.joinUrl ?? ""} />
+          <VideoMeetingJoinButton meetingId={meeting.id} joinUrl={meeting.joinUrl ?? ""} accountEmail={accountEmail} />
         ) : null}
         <VideoMeetingEndButton meetingId={meeting.id} />
       </div>

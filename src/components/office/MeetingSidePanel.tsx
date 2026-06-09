@@ -10,10 +10,12 @@ export function MeetingSidePanel({
   sharedItems,
   activeMeeting,
   operationStatus,
+  accountEmail,
 }: {
   sharedItems: SharedItem[];
   activeMeeting?: VideoMeeting | null;
   operationStatus: OperationStatusSnapshot;
+  accountEmail?: string | null;
 }) {
   return (
     <div className="office-side-panel flex h-full min-h-0 flex-col gap-4">
@@ -33,7 +35,7 @@ export function MeetingSidePanel({
           <Action href="/rooms/meeting" icon={<ListChecks className="size-4" />} label="할 일 만들기" />
         </div>
       </WarmCard>
-      <VideoMeetingPanel activeMeeting={activeMeeting ?? null} compact />
+      <VideoMeetingPanel activeMeeting={activeMeeting ?? null} accountEmail={accountEmail} compact />
       <WarmCard className="office-side-card office-recent-card">
         <p className="mb-3 text-sm font-semibold">최근 공유 카드</p>
         <div className="space-y-2">
