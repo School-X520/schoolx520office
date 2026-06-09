@@ -94,6 +94,48 @@ describe("video meeting service", () => {
     );
   });
 
+  it("uses a connected Google token even when the env feature flag is missing", async () => {
+    closeOpenMeetingRows("meeting");
+    vi.stubEnv("GOOGLE_MEET_ENABLED", "false");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "client-id");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "client-secret");
+    vi.stubEnv("GOOGLE_REDIRECT_URI", "http://localhost:3000/api/integrations/google/callback");
+    vi.stubEnv("GOOGLE_REFRESH_TOKEN", "refresh-token");
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ access_token: "access-token", expires_in: 3600, token_type: "Bearer" }), {
+            status: 200,
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              name: "spaces/schoolx-with-token",
+              meetingUri: "https://meet.google.com/XYZ-WXYZ-XYZ",
+              meetingCode: "xyz-wxyz-xyz",
+            }),
+            { status: 200 },
+          ),
+        ),
+    );
+
+    const meeting = await createVideoMeeting(mockUser.userId, {
+      roomId: "meeting",
+      provider: "google_meet",
+      title: "연결 토큰 회의",
+      consentRecording: false,
+      consentTranscript: false,
+      consentAiSummary: true,
+    });
+
+    expect(meeting.joinUrl).toBe("https://meet.google.com/xyz-wxyz-xyz");
+    expect(meeting.metadata.mode).toBe("api_created_meet_space");
+    expect(meeting.metadata.requiresJoinUrlRegistration).toBe(false);
+  });
+
   it("registers the generated Meet link before users join", async () => {
     closeOpenMeetingRows("meeting");
     const meeting = await createVideoMeeting(mockUser.userId, {

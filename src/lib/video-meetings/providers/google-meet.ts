@@ -25,11 +25,10 @@ export class GoogleMeetProvider implements VideoMeetingProvider {
   };
 
   async createMeeting(): Promise<ProviderMeetingResult> {
-    if (!this.capability.enabled) {
+    const accessToken = await getGoogleMeetAccessToken();
+    if (!this.capability.enabled && !accessToken) {
       return manualGoogleMeetLinkResult("disabled");
     }
-
-    const accessToken = await getGoogleMeetAccessToken();
     if (!accessToken) {
       return manualGoogleMeetLinkResult("missing_oauth_token");
     }
