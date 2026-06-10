@@ -38,7 +38,11 @@ export function FileDownloadButton({ fileId, roomId }: { fileId: string; roomId:
       >
         <Download className="size-4" />
       </Button>
-      {error ? <p className="sr-only" role="alert">{error}</p> : null}
+      {error ? (
+        <p role="alert" aria-live="assertive" className="text-xs text-terracotta">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Bot, Send, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DEVELOPMENT_AGENT_ID, DEVELOPMENT_AGENT_ROOM_ID } from "@/lib/agents/development-agent";
@@ -35,7 +35,19 @@ export function MessageComposer({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [botEnabled, setBotEnabled] = useState(() => Boolean(!isMeeting && residentAgent));
   const [selectedGuestAgentIds, setSelectedGuestAgentIds] = useState<string[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const selectedGuestAgents = guestAgents.filter((agent) => selectedGuestAgentIds.includes(agent.id));
+
+  function autoGrowTextarea(element: HTMLTextAreaElement) {
+    element.style.height = "auto";
+    element.style.height = `${Math.min(element.scrollHeight, 128)}px`;
+  }
+
+  function resetTextareaHeight() {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+  }
   const selectedRoomAgents = isMeeting
     ? []
     : [
@@ -53,6 +65,7 @@ export function MessageComposer({
     const optimisticMessage = createOptimisticMessage(roomId, threadId, currentUserId, content);
     onOptimisticMessage(optimisticMessage);
     setValue("");
+    resetTextareaHeight();
     setError(null);
     setIsSubmitting(true);
 
@@ -255,8 +268,13 @@ export function MessageComposer({
 
       <div className="flex items-end gap-2">
         <textarea
+          ref={textareaRef}
           value={value}
-          onChange={(event) => setValue(event.target.value)}
+          aria-label="메시지 입력"
+          onChange={(event) => {
+            setValue(event.target.value);
+            autoGrowTextarea(event.target);
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
@@ -265,10 +283,10 @@ export function MessageComposer({
           }}
           placeholder={
             isMeeting
-              ? "회의방에 메시지 보내기"
+              ? "회의방에 메시지 보내기 (Enter 전송, Shift+Enter 줄바꿈)"
               : selectedRoomAgents.length
                 ? `${selectedRoomAgents.map(agentActionLabel).join(", ")}`
-                : "단체 채팅에 메시지 보내기"
+                : "단체 채팅에 메시지 보내기 (Enter 전송, Shift+Enter 줄바꿈)"
           }
           className="max-h-32 min-h-11 flex-1 resize-none rounded-lg border border-line bg-white/70 px-3 py-2 text-sm text-ink shadow-sm placeholder:text-ink-soft/60 focus-visible:outline-2 focus-visible:outline-offset-2"
           rows={1}
@@ -279,7 +297,11 @@ export function MessageComposer({
         </Button>
       </div>
       {error ? (
-        <p className="mt-2 rounded-md border border-terracotta/35 bg-terracotta/10 px-3 py-2 text-sm text-terracotta">
+        <p
+          role="alert"
+          aria-live="assertive"
+          className="mt-2 rounded-md border border-terracotta/35 bg-terracotta/10 px-3 py-2 text-sm text-terracotta"
+        >
           {error}
         </p>
       ) : null}
