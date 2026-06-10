@@ -2,6 +2,7 @@ import "server-only";
 
 import { COORDINATOR_AGENT_ID, getCoordinatorAgent } from "@/lib/agents/development-agent";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { decryptSecret, encryptSecret } from "@/server/integrations/token-crypto";
 import type {
   Agent,
   AgentPersona,
@@ -494,8 +495,8 @@ function auditFrom(rowValue: Record<string, unknown>): AuditLog {
 function integrationTokenFrom(rowValue: Record<string, unknown>): IntegrationToken {
   return {
     provider: text(rowValue.provider),
-    refreshToken: nullableText(rowValue.refresh_token),
-    accessToken: nullableText(rowValue.access_token),
+    refreshToken: decryptSecret(nullableText(rowValue.refresh_token)),
+    accessToken: decryptSecret(nullableText(rowValue.access_token)),
     expiresAt: nullableText(rowValue.expires_at),
     scope: nullableText(rowValue.scope),
     tokenType: nullableText(rowValue.token_type),
@@ -1796,8 +1797,8 @@ export const supabaseStore = {
       .from("integration_tokens")
       .upsert({
         provider: input.provider,
-        refresh_token: input.refreshToken ?? null,
-        access_token: input.accessToken ?? null,
+        refresh_token: encryptSecret(input.refreshToken ?? null),
+        access_token: encryptSecret(input.accessToken ?? null),
         expires_at: input.expiresAt ?? null,
         scope: input.scope ?? null,
         token_type: input.tokenType ?? null,
