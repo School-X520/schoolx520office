@@ -213,11 +213,11 @@
 2. ✅ Pretendard 실제 로드 (P1-19) — CDN(dynamic subset) + `--font-sans` 선두 교체. "디자인 시스템 정합화"의 팔레트 부분(warm vs Navy/Gold)은 시각 결정이 필요해 별도
 3. 🔄 대부분 — ✅ 영문 상태값 한글화(status-labels) (P3) / 🔄 Dialog 통합(P1-17): 오버레이 스타일 단일화(dialog-styles, bg-black/35 드리프트 제거) 완료, **제어형 Dialog 전면 통합은 시각 검증 필요로 별도** / ✅ a11y 보강(MessageComposer aria-label·auto-grow·role=alert, FileDownloadButton sr-only 수정)
 4. 🔄 부분 — ✅ Playwright 설정 보정(reuseExistingServer !CI, retries). ⬜ DB 생성 타입 + 계약 테스트 + E2E 시나리오 (P1-13,14) — `supabase gen types`·계약 테스트·E2E 실행이 **라이브 Supabase/앱 구동 필요**, 별도 세션
-5. ✅ Zod 입력 검증 (P2-1) — 고위험 6개 라우트 스키마 + 배열 상한(amplification 차단). ✅ 업로드 제한(P2-3) — 50MB 상한(413) + 실행 파일 확장자 차단(415). 나머지 라우트 Zod는 점진 확대
+5. ✅ Zod 입력 검증 (P2-1) — agent-runs·messages·tasks·decisions(+[id])·meeting-imports·files/share·admin(memberships,allowed-users)·shared-items·video-meetings(create,artifacts,join-url)·file-versions에 스키마 적용(배열 상한 amplification 차단, artifact externalUrl http(s) 강제로 P3 open-redirect 차단). 잔여는 formData 업로드·downstream 검증된 zoom signature뿐. ✅ 업로드 제한(P2-3) — 50MB 상한(413) + 실행 파일 확장자 차단(415)
 6. ⬜ 마이그레이션 PII 분리 + seed 체계 + 보존 정책 (P1-3,10) — 이미 적용된 마이그레이션 수정은 위험, forward 마이그레이션/seed 재설계로 신중히
-7. ✅ HttpError 정리(P2-9) / ⬜ 라우트→서비스 위임·lib·server 경계(P2-7,8) — 점진
+7. ✅ HttpError 정리(P2-9) / 🔄 라우트→서비스 위임(P2-7): agent-runs/[runId] GET → getAgentRunDetail 서비스 추출(시작). 나머지 라우트는 점진
 
-**Phase 2 잔여(별도 세션 권장):** 제어형 Dialog 전면 통합(시각 검증), DB 생성 타입·계약 테스트·E2E 실행(라이브 환경), 마이그레이션 PII 분리(forward 마이그레이션), 라우트→서비스 위임 정리, Zod 라우트 확대.
+**Phase 2 잔여(별도 세션 권장):** 제어형 Dialog 전면 통합(시각 검증), DB 생성 타입·계약 테스트·E2E 실행(라이브 환경), 마이그레이션 PII 분리(forward 마이그레이션), 라우트→서비스 위임 추가 정리.
 
 ### Phase 3 — 스케일 대비 (50방/500유저 전)
 1. 에이전트 실행 큐 기반 워커 이관 (`after()`+인메모리 Map 탈피)
