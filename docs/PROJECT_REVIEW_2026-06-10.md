@@ -194,19 +194,19 @@
 6. `globals.css:133-146` 죽은 CSS 삭제 + diff 회귀 2건(`createdAt:""`, `Map.get as`) 수정
 7. HANDOFF 문서 시크릿 정리 + 키 로테이션 실행 (P1-4)
 
-### Phase 1 — 운영 안정화 (1~2주) — 🔄 대부분 완료 (2026-06-10, 커밋 719bb7b·026cb0d·d186db3·b2b6b5a·4987ffa)
+### Phase 1 — 운영 안정화 (1~2주) — ✅ 완료 (2026-06-10, 커밋 719bb7b·026cb0d·d186db3·b2b6b5a·4987ffa·8075e6d·8e7ae8c)
 1. ✅ 단건 조회 메서드(`getAgentRunById`) — 핫패스 4곳 full-scan 제거. listMessages 페이지네이션은 Realtime 작업과 함께 Phase 2로 (P0-6 부분)
-2. ⬜ `DataStore` 인터페이스 + `getDataStore()` 팩토리 (P0-7) — 60+ 메서드 + 기존 drift(~12개) 정합화 필요, 별도 세션 권장
+2. ✅ `DataStore` 타입 + `getDataStore()` 팩토리 (P0-7) — supabaseStore를 진실원으로 파생, 팩토리 반환 타입이 mock 정합성을 컴파일 타임에 강제. drift 14건 정합화(누락 8 메서드 추가, 시그니처 정렬, mock update* throw 통일). addFile은 의도적 분기로 제외. 핵심 에이전트 흐름 3파일 마이그레이션 + 런타임 정합성 테스트
 3. ✅ GitHub Actions CI(lint/typecheck/test/build) + packageManager 핀 (P1-12). Vercel "Require checks" 연결은 대시보드 수동 작업
 4. ✅ stuck run sweeper(5분 타임아웃 자동 failed) + agent_runs 원자 전이(queued→running 조건부 UPDATE) (P1-6,7). maxDuration 상향/큐 이관은 Phase 3
 5. ✅ rate limit — 방당 동시 활성 run 상한(3) + 좀비 제외, DB 기반 무인프라 (P1-5). 일일 토큰 예산 알림은 관측성(Sentry)과 함께 별도
 6. ✅ integration_tokens 암호화 — AES-256-GCM + `INTEGRATION_TOKENS_ENC_KEY`, 평문 읽기 폴백(점진 마이그레이션) (P0-5)
 7. ✅ FK 인덱스 9건(0018) + finalizeAgentRun keyFact 정리(중복제거+50개 상한) (P1-9,11)
-8. ⬜ middleware `updateSession` + 인증 1차 게이트 (P1-2) — Supabase SSR, 로그인 라이브 테스트 필요(별도 세션 권장)
+8. ✅ middleware Supabase 세션 갱신(@supabase/ssr 공식 패턴, mock 모드 no-op, fail-open) (P1-2). 인증 리다이렉트 게이트는 페이지 레벨 유지(루프 방지). **배포 전 로그인 1회 라이브 검증 필요**
 9. ✅ backfill 중복 쿼리 제거(후보당 2회→0회) (P1-8 부분). inline await는 backfill-on-view 설계/테스트상 유지
 10. ✅ not-found/error/global-error 바운더리 + jsonError 위생(5xx 내부메시지 차단) + `/api/health` (P1-15, P2). Sentry는 별도(의존성 추가 필요)
 
-**Phase 1 잔여(2건, 별도 세션 권장):** P0-7 DataStore 인터페이스(대규모·drift 정합화), P1-2 middleware 세션 갱신(라이브 로그인 테스트 필요).
+**Phase 1 완료.** 남은 보강(Phase 2/3 또는 후속): listMessages 페이지네이션(Realtime와 함께), Sentry 관측성, maxDuration/큐 이관, Vercel 머지 게이트 연결, P1-2 라이브 로그인 검증.
 
 ### Phase 2 — 제품 완성 (2~4주)
 1. **Supabase Realtime 채팅** + 스크롤 정책 + mock 요소 제거 (P0-8, P1-18,20)
