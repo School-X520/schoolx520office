@@ -1,10 +1,20 @@
+import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { shouldUseMockData } from "@/lib/env";
 import { shareMessageToMeeting } from "@/server/collaboration/share-import-service";
 import { requireRoomMember } from "@/server/auth/require-room-member";
 import { requireUser } from "@/server/auth/require-user";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
+
+const sharedItemBodySchema = z.object({
+  sourceRoomId: z.string().max(64).optional(),
+  sourceMessageId: z.string().max(128).optional(),
+  sourceFileId: z.string().max(128).optional(),
+  title: z.string().max(500).optional(),
+  summary: z.string().max(4000).optional(),
+});
 
 export async function GET(request: Request) {
   try {
@@ -23,13 +33,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
-    const body = (await request.json()) as {
-      sourceRoomId?: string;
-      sourceMessageId?: string;
-      sourceFileId?: string;
-      title?: string;
-      summary?: string;
-    };
+    const body = await parseJsonBody(request, sharedItemBodySchema);
     const item = await shareMessageToMeeting({
       userId: user.userId,
       sourceRoomId: body.sourceRoomId ?? "meeting",

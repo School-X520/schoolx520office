@@ -1,6 +1,18 @@
+import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { createVideoMeeting, listVideoMeetings } from "@/lib/video-meetings/service";
 import { requireUser } from "@/server/auth/require-user";
+
+const videoMeetingBodySchema = z.object({
+  roomId: z.string().max(64).optional(),
+  provider: z.enum(["google_meet", "zoom"]).optional(),
+  title: z.string().max(300).optional(),
+  description: z.string().max(2000).optional(),
+  consentRecording: z.boolean().optional(),
+  consentTranscript: z.boolean().optional(),
+  consentAiSummary: z.boolean().optional(),
+});
 
 export async function GET(request: Request) {
   try {
@@ -18,15 +30,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
-    const body = (await request.json()) as {
-      roomId?: string;
-      provider?: "google_meet" | "zoom";
-      title?: string;
-      description?: string;
-      consentRecording?: boolean;
-      consentTranscript?: boolean;
-      consentAiSummary?: boolean;
-    };
+    const body = await parseJsonBody(request, videoMeetingBodySchema);
     const meeting = await createVideoMeeting(user.userId, {
       roomId: body.roomId ?? "meeting",
       provider: body.provider ?? "google_meet",

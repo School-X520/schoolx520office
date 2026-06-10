@@ -1,10 +1,17 @@
+import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { shouldUseMockData } from "@/lib/env";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { requireUser } from "@/server/auth/require-user";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { statusError } from "@/lib/http-error";
+
+const decisionUpdateSchema = z.object({
+  title: z.string().max(500).optional(),
+  description: z.string().max(4000).optional(),
+});
 
 async function requireMeetingDecisionEditor(userId: string, decisionId: string) {
   const membership = await requireRoomMember(userId, "meeting");
@@ -24,7 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const user = await requireUser();
     const { id } = await params;
     const { source, decision } = await requireMeetingDecisionEditor(user.userId, id);
-    const body = (await request.json()) as { title?: string; description?: string };
+    const body = await parseJsonBody(request, decisionUpdateSchema);
     const title = body.title?.trim();
     if (!title) {
       throw statusError("결정사항 제목이 필요합니다.", 400);

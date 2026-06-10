@@ -1,8 +1,17 @@
+import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { shouldUseMockData } from "@/lib/env";
 import { requireAdmin } from "@/server/auth/require-user";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
+
+const allowedUserBodySchema = z.object({
+  email: z.string().max(256).optional(),
+  isAdmin: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  notes: z.string().max(1000).optional(),
+});
 
 export async function GET() {
   try {
@@ -17,7 +26,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await requireAdmin();
-    const body = (await request.json()) as { email?: string; isAdmin?: boolean; notes?: string; isActive?: boolean };
+    const body = await parseJsonBody(request, allowedUserBodySchema);
     const email = body.email?.trim().toLowerCase();
     if (!email) {
       return jsonOk({ ok: false, message: "email이 필요합니다." }, { status: 400 });
@@ -62,11 +71,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const user = await requireAdmin();
-    const body = (await request.json()) as {
-      email?: string;
-      isAdmin?: boolean;
-      isActive?: boolean;
-    };
+    const body = await parseJsonBody(request, allowedUserBodySchema);
     const email = body.email?.trim().toLowerCase();
     if (!email) {
       return jsonOk({ ok: false, message: "email이 필요합니다." }, { status: 400 });

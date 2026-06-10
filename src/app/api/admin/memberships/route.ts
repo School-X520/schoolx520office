@@ -1,9 +1,18 @@
+import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { shouldUseMockData } from "@/lib/env";
 import { requireAdmin } from "@/server/auth/require-user";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
-import type { RoomRole } from "@/types/domain";
+
+const membershipBodySchema = z.object({
+  action: z.string().max(64).optional(),
+  roomId: z.string().max(64).optional(),
+  roomIds: z.array(z.string().max(64)).max(20).optional(),
+  targetUserId: z.string().max(256).optional(),
+  role: z.enum(["admin", "member", "observer"]).optional(),
+});
 
 export async function GET() {
   try {
@@ -18,13 +27,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await requireAdmin();
-    const body = (await request.json()) as {
-      action?: string;
-      roomId?: string;
-      roomIds?: string[];
-      targetUserId?: string;
-      role?: RoomRole;
-    };
+    const body = await parseJsonBody(request, membershipBodySchema);
     const roomIds = Array.from(
       new Set(
         (Array.isArray(body.roomIds) && body.roomIds.length ? body.roomIds : body.roomId ? [body.roomId] : [])
