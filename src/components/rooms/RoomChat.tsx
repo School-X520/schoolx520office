@@ -190,7 +190,7 @@ export function RoomChat({
                 ...message.metadata,
                 pendingAgentRun: true,
                 agentRunStatus: run.status,
-                agentRunActivity: activity,
+                agentRunActivity: latestAgentRunActivity(activity),
               },
             }
           : message,
@@ -302,6 +302,11 @@ function mergeMessages(current: RoomMessage[], incoming: RoomMessage[]) {
   const byId = new Map(current.map((message) => [message.id, message]));
   incoming.forEach((message) => byId.set(message.id, message));
   return [...byId.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
+
+function latestAgentRunActivity(activity: AgentRunActivity[]) {
+  const latest = activity.at(-1);
+  return latest ? [latest] : [];
 }
 
 function wait(ms: number) {

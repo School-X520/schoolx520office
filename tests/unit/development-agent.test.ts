@@ -32,6 +32,188 @@ describe("development bot global room observer", () => {
     expect(started.run.mode).toBe("room");
   });
 
+  it("mirrors development bot requests from other rooms into the development room chat", async () => {
+    const request = "화상회의 참여 버튼이 헷갈리니 개발 요구사항으로 남겨줘.";
+    const beforeMessages = mockStore.listMessages("development");
+
+    const started = await startAgentRun({
+      userId: mockUser.userId,
+      roomId: "finance",
+      agentId: DEVELOPMENT_AGENT_ID,
+      message: request,
+      mode: "room",
+    });
+
+    const newDevelopmentMessages = mockStore
+      .listMessages("development")
+      .filter((message) => !beforeMessages.some((previous) => previous.id === message.id));
+    const mirrorMessage = newDevelopmentMessages.find(
+      (message) => message.metadata.developmentRequestMirror === true,
+    );
+
+    expect(mirrorMessage).toBeTruthy();
+    expect(mirrorMessage?.type).toBe("agent");
+    expect(mirrorMessage?.senderAgentId).toBe(DEVELOPMENT_AGENT_ID);
+    expect(mirrorMessage?.agentRunId).toBe(started.run.id);
+    expect(mirrorMessage?.content).toContain("[개발 요청 접수]");
+    expect(mirrorMessage?.content).toContain("원본 방: 재무");
+    expect(mirrorMessage?.content).toContain("요청자: 총괄 관리자");
+    expect(mirrorMessage?.content).toContain(request);
+    expect(mirrorMessage?.metadata).toMatchObject({
+      sourceRoomId: "finance",
+      sourceMessageId: started.inputMessage.id,
+      sourceAgentRunId: started.run.id,
+      requesterUserId: mockUser.userId,
+      requesterName: "총괄 관리자",
+    });
+    expect(started.run.metadata.developmentRoomMirrorMessageId).toBe(mirrorMessage?.id);
+  });
+
+  it("treats the development bot toggle as a development request without trigger wording", async () => {
+    const request = "버튼 색이 너무 흐려서 잘 안 보여.";
+    const beforeMessages = mockStore.listMessages("development");
+
+    const started = await startAgentRun({
+      userId: mockUser.userId,
+      roomId: "planning",
+      agentId: DEVELOPMENT_AGENT_ID,
+      message: request,
+      mode: "room",
+      intent: "development_request",
+    });
+
+    const mirrorMessage = mockStore
+      .listMessages("development")
+      .filter((message) => !beforeMessages.some((previous) => previous.id === message.id))
+      .find((message) => message.metadata.developmentRequestMirror === true);
+
+    expect(started.run.metadata.requestIntent).toBe("development_request");
+    expect(mirrorMessage?.content).toContain(request);
+    expect(mirrorMessage?.content).toContain("원본 방: 기획");
+    expect(mirrorMessage?.content).toContain("요청자: 총괄 관리자");
+    expect(mirrorMessage?.content).toContain("접수 방식: 개발봇 토글");
+    expect(mirrorMessage?.metadata).toMatchObject({
+      requestIntent: "development_request",
+      sourceRoomId: "planning",
+      sourceAgentRunId: started.run.id,
+      requesterUserId: mockUser.userId,
+      requesterName: "총괄 관리자",
+    });
+  });
+
+  it("mirrors development bot guest requests from the main meeting room into the development room chat", async () => {
+    const request = "메인 회의방에서 나온 개발 요청도 개발방에 남겨줘.";
+    const meetingThread = mockStore.ensureRoomThread("meeting");
+    const meetingMessage = mockStore.createMessage({
+      roomId: "meeting",
+      threadId: meetingThread.id,
+      type: "human",
+      content: request,
+      senderUserId: mockUser.userId,
+    });
+    const beforeMessages = mockStore.listMessages("development");
+
+    const started = await startAgentRun({
+      userId: mockUser.userId,
+      roomId: "meeting",
+      threadId: meetingThread.id,
+      inputMessageId: meetingMessage.id,
+      agentId: DEVELOPMENT_AGENT_ID,
+      message: request,
+      mode: "meeting_guest",
+      guestSourceRoomId: "development",
+    });
+
+    const mirrorMessage = mockStore
+      .listMessages("development")
+      .filter((message) => !beforeMessages.some((previous) => previous.id === message.id))
+      .find((message) => message.metadata.developmentRequestMirror === true);
+
+    expect(started.run.mode).toBe("meeting_guest");
+    expect(mirrorMessage).toBeTruthy();
+    expect(mirrorMessage?.content).toContain("[개발 요청 접수]");
+    expect(mirrorMessage?.content).toContain("원본 방: 메인 회의방");
+    expect(mirrorMessage?.content).toContain(request);
+    expect(mirrorMessage?.metadata).toMatchObject({
+      sourceRoomId: "meeting",
+      sourceThreadId: meetingThread.id,
+      sourceMessageId: meetingMessage.id,
+      sourceAgentRunId: started.run.id,
+    });
+  });
+
+  it("lets meeting members call the development bot without development room membership", async () => {
+    const meetingOnlyUserId = "00000000-0000-4000-8000-000000000099";
+    mockStore.upsertMembership({ userId: meetingOnlyUserId, roomId: "meeting", role: "member" });
+
+    const meetingView = await getRoomView(meetingOnlyUserId, "meeting");
+    expect(meetingView?.guestAgents.map((agent) => agent.id)).toContain(DEVELOPMENT_AGENT_ID);
+
+    const started = await startAgentRun({
+      userId: meetingOnlyUserId,
+      roomId: "meeting",
+      agentId: DEVELOPMENT_AGENT_ID,
+      message: "개발방 권한은 없지만 개발 요청은 접수해줘.",
+      mode: "meeting_guest",
+      guestSourceRoomId: "development",
+    });
+
+    expect(started.run.agentId).toBe(DEVELOPMENT_AGENT_ID);
+    expect(started.run.metadata.developmentRoomMirrorMessageId).toBeTruthy();
+  });
+
+  it("backfills missing development bot guest requests when opening the development room", async () => {
+    const request = "백필되어야 하는 메인방 개발 요청";
+    const meetingThread = mockStore.ensureRoomThread("meeting");
+    const meetingMessage = mockStore.createMessage({
+      roomId: "meeting",
+      threadId: meetingThread.id,
+      type: "human",
+      content: request,
+      senderUserId: mockUser.userId,
+    });
+    const run = mockStore.createAgentRun({
+      roomId: "meeting",
+      threadId: meetingThread.id,
+      agentId: DEVELOPMENT_AGENT_ID,
+      initiatedBy: mockUser.userId,
+      mode: "meeting_guest",
+      runType: "meeting_guest",
+      guestSourceRoomId: "development",
+      inputMessageId: meetingMessage.id,
+      status: "completed",
+    });
+
+    expect(mockStore.listMessages("development").some((message) => message.metadata.sourceAgentRunId === run.id)).toBe(
+      false,
+    );
+
+    const developmentView = await getRoomView(mockUser.userId, "development");
+    const mirrorMessage = developmentView?.messages.find((message) => message.metadata.sourceAgentRunId === run.id);
+
+    expect(mirrorMessage).toBeTruthy();
+    expect(mirrorMessage?.content).toContain(request);
+    expect(developmentView?.activeThread.title).toBe("개발 요청 접수함");
+  });
+
+  it("does not mirror development bot requests already made in the development room", async () => {
+    const beforeMessages = mockStore.listMessages("development");
+
+    await startAgentRun({
+      userId: mockUser.userId,
+      roomId: "development",
+      agentId: DEVELOPMENT_AGENT_ID,
+      message: "개발방 안에서 직접 논의하는 요구사항",
+      mode: "room",
+    });
+
+    const newDevelopmentMessages = mockStore
+      .listMessages("development")
+      .filter((message) => !beforeMessages.some((previous) => previous.id === message.id));
+
+    expect(newDevelopmentMessages.some((message) => message.metadata.developmentRequestMirror === true)).toBe(false);
+  });
+
   it("lets the development bot search accessible room conversations beyond the active room", async () => {
     const planningThread = mockStore.ensureRoomThread("planning");
     const uniquePlanningMessage = "개발봇 전역 관찰 테스트용 기획 대화";

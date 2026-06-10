@@ -16,7 +16,12 @@ import { supabaseStore } from "@/server/data/supabase-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { ForbiddenError } from "@/server/auth/errors";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
-import { getCoordinatorAgent, isCoordinatorAgent, isDevelopmentAgent } from "@/lib/agents/development-agent";
+import {
+  getCoordinatorAgent,
+  isCoordinatorAgent,
+  isDevelopmentAgent,
+} from "@/lib/agents/development-agent";
+import { mirrorDevelopmentAgentRequest } from "@/server/agents/development-request-mirror";
 import { generateCoordinatorBriefing } from "@/server/coordinator/coordinator-briefing-service";
 import type { AgentRun, AgentRunMode, AgentRunType, CoordinatorBriefing, RoomBriefing, RoomMessage } from "@/types/domain";
 import type { AgentStreamEvent } from "@/server/agents/types";
@@ -31,6 +36,7 @@ type RunAgentInput = {
   mode?: AgentRunMode;
   runType?: AgentRunType;
   guestSourceRoomId?: string | null;
+  intent?: "development_request" | null;
 };
 
 type AgentRunJob = {
@@ -85,7 +91,9 @@ export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentR
     if (input.roomId !== "meeting") {
       throw new Error("게스트 봇 호출은 메인 회의방에서만 가능합니다.");
     }
-    await requireRoomMember(input.userId, guestSourceRoomId ?? agent.roomId);
+    if (!isDevelopmentAgent(agent)) {
+      await requireRoomMember(input.userId, guestSourceRoomId ?? agent.roomId);
+    }
   } else if (agent.roomId !== input.roomId && !isDevelopmentAgent(agent)) {
     throw new Error("이 방의 상주 봇만 호출할 수 있습니다.");
   }
@@ -115,26 +123,38 @@ export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentR
     guestSourceRoomId,
     inputMessageId: inputMessage.id,
     status: "queued",
-    metadata: isCoordinatorAgent(agent)
-      ? {
-          coordinatorAgentId: agent.id,
-          guestLabel: agent.name,
-          coordinatorPm: true,
-        }
-      : {},
+    metadata: {
+      ...(isCoordinatorAgent(agent)
+        ? {
+            coordinatorAgentId: agent.id,
+            guestLabel: agent.name,
+            coordinatorPm: true,
+          }
+        : {}),
+      ...(input.intent ? { requestIntent: input.intent } : {}),
+    },
+  });
+  const mirroredRun = await mirrorDevelopmentAgentRequest({
+    source,
+    agent,
+    run,
+    userId: input.userId,
+    sourceRoomId: input.roomId,
+    sourceThreadId: thread.id,
+    inputMessage,
   });
 
-  await recordProgress(source, run.id, {
+  await recordProgress(source, mirroredRun.id, {
     key: "queued",
     title: "실행 요청 접수",
     detail: agent.name,
   });
 
   return {
-    run,
+    run: mirroredRun,
     inputMessage,
     job: {
-      runId: run.id,
+      runId: mirroredRun.id,
       userId: input.userId,
       roomId: input.roomId,
       threadId: thread.id,

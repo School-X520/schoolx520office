@@ -27,7 +27,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ roomId: st
       : null;
     const events = await source.listAgentRunEvents(runId);
 
-    return jsonOk({ run, outputMessage, activity: publicAgentRunActivity(run, events) });
+    return jsonOk({ run, outputMessage, activity: publicAgentRunActivity(run, events) }, noStoreJsonInit);
   } catch (error) {
     return jsonError(error);
   }
@@ -43,8 +43,14 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ roomId:
       runId,
     });
 
-    return jsonOk(result);
+    return jsonOk(result, noStoreJsonInit);
   } catch (error) {
     return jsonError(error);
   }
 }
+
+const noStoreJsonInit = {
+  headers: {
+    "cache-control": "no-store",
+  },
+} satisfies ResponseInit;

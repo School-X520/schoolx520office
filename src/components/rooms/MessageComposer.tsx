@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bot, Send, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DEVELOPMENT_AGENT_ID, DEVELOPMENT_AGENT_ROOM_ID } from "@/lib/agents/development-agent";
 import { cn } from "@/lib/utils/cn";
 import type { Agent, AgentRun, RoomMessage } from "@/types/domain";
 
@@ -144,6 +145,7 @@ export function MessageComposer({
         mode: "meeting_guest",
         agentId: agent.id,
         guestSourceRoomId: agent.roomId,
+        intent: isDevelopmentRequestAgent(agent) ? "development_request" : undefined,
       }),
     });
     const payload = (await response.json()) as { error?: string; run?: AgentRun };
@@ -163,6 +165,7 @@ export function MessageComposer({
         inputMessageId,
         mode: "room",
         agentId: agent.id,
+        intent: isDevelopmentRequestAgent(agent) ? "development_request" : undefined,
       }),
     });
     const payload = (await response.json()) as { error?: string; run?: AgentRun };
@@ -241,12 +244,12 @@ export function MessageComposer({
       </div>
       {isMeeting && selectedGuestAgents.length ? (
         <p className="mb-2 text-xs text-ink-soft">
-          {selectedGuestAgents.map((agent) => agent.name).join(", ")} 응답
+          {selectedGuestAgents.map(agentActionLabel).join(", ")}
         </p>
       ) : null}
       {!isMeeting && selectedRoomAgents.length > 1 ? (
         <p className="mb-2 text-xs text-ink-soft">
-          {selectedRoomAgents.map((agent) => agent.name).join(", ")} 응답
+          {selectedRoomAgents.map(agentActionLabel).join(", ")}
         </p>
       ) : null}
 
@@ -264,7 +267,7 @@ export function MessageComposer({
             isMeeting
               ? "회의방에 메시지 보내기"
               : selectedRoomAgents.length
-                ? `${selectedRoomAgents.map((agent) => agent.name).join(", ")}에게 메시지 보내기`
+                ? `${selectedRoomAgents.map(agentActionLabel).join(", ")}`
                 : "단체 채팅에 메시지 보내기"
           }
           className="max-h-32 min-h-11 flex-1 resize-none rounded-lg border border-line bg-white/70 px-3 py-2 text-sm text-ink shadow-sm placeholder:text-ink-soft/60 focus-visible:outline-2 focus-visible:outline-offset-2"
@@ -311,9 +314,17 @@ function AgentToggle({
         <span className="size-4 rounded-full bg-white shadow-sm" />
       </span>
       <Bot className="size-3.5" />
-      <span>{agent.name} 응답</span>
+      <span>{agentActionLabel(agent)}</span>
     </label>
   );
+}
+
+function isDevelopmentRequestAgent(agent: Agent) {
+  return agent.id === DEVELOPMENT_AGENT_ID || agent.roomId === DEVELOPMENT_AGENT_ROOM_ID;
+}
+
+function agentActionLabel(agent: Agent) {
+  return isDevelopmentRequestAgent(agent) ? `${agent.name} 개발 요청` : `${agent.name} 응답`;
 }
 
 function createOptimisticMessage(roomId: string, threadId: string, currentUserId: string, content: string): RoomMessage {

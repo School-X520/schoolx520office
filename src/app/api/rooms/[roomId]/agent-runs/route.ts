@@ -16,6 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ roo
       agentId?: string;
       guestSourceRoomId?: string;
       inputMessageId?: string;
+      intent?: "development_request";
     };
     const result = await startAgentRun({
       userId: user.userId,
@@ -26,6 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ roo
       mode: body.mode ?? "room",
       agentId: body.agentId,
       guestSourceRoomId: body.guestSourceRoomId ?? null,
+      intent: body.intent ?? null,
     });
 
     after(async () => {

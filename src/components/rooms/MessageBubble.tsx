@@ -185,16 +185,24 @@ function AgentRunActivityPanel({
   onCancelAgentRun?: (runId: string) => void;
 }) {
   const canCancel = Boolean(runId && onCancelAgentRun);
+  const currentActivity = latestActivity(activity);
 
   return (
-    <div className="mt-3 rounded-lg border border-sage/20 bg-card/75 px-3 py-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-medium text-ink">작업 과정</p>
+    <div className="agent-run-activity-panel mt-3 rounded-lg border border-sage/20 bg-card/75 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <ActivityIcon status={currentActivity.status} />
+        <p className="min-w-0 flex-1 truncate text-xs text-ink-soft">
+          <span className="font-medium text-ink">작업 과정</span>
+          <span className="px-1">·</span>
+          <span className="font-medium text-ink">{currentActivity.title}</span>
+          {currentActivity.detail ? <span> - {currentActivity.detail}</span> : null}
+        </p>
         {canCancel ? (
           <Button
             type="button"
             variant="danger"
             size="sm"
+            className="shrink-0"
             disabled={isCancelling}
             onClick={() => runId && onCancelAgentRun?.(runId)}
           >
@@ -203,17 +211,6 @@ function AgentRunActivityPanel({
           </Button>
         ) : null}
       </div>
-      <ol className="mt-2 space-y-1.5">
-        {(activity.length ? activity : fallbackActivity()).map((item) => (
-          <li key={item.id} className="flex gap-2 text-xs leading-5 text-ink-soft">
-            <ActivityIcon status={item.status} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium text-ink">{item.title}</p>
-              {item.detail ? <p className="truncate text-ink-soft">{item.detail}</p> : null}
-            </div>
-          </li>
-        ))}
-      </ol>
       {cancelError ? (
         <p className="mt-2 rounded-md border border-terracotta/35 bg-terracotta/10 px-2 py-1.5 text-xs text-terracotta">
           {cancelError}
@@ -233,16 +230,16 @@ function ActivityIcon({ status }: { status: AgentRunActivity["status"] }) {
   return <CircleDot className="mt-0.5 size-3.5 shrink-0 text-bronze" />;
 }
 
-function fallbackActivity(): AgentRunActivity[] {
-  return [
-    {
+function latestActivity(activity: AgentRunActivity[]): AgentRunActivity {
+  return (
+    activity.at(-1) ?? {
       id: "fallback-running",
       title: "실행 상태 확인",
       detail: null,
       status: "running",
       createdAt: new Date().toISOString(),
-    },
-  ];
+    }
+  );
 }
 
 function getAgentRunActivity(metadata: RoomMessage["metadata"]) {
@@ -251,7 +248,7 @@ function getAgentRunActivity(metadata: RoomMessage["metadata"]) {
     return [];
   }
 
-  return value.flatMap((item) => {
+  const activity = value.flatMap((item) => {
     if (!item || typeof item !== "object") {
       return [];
     }
@@ -270,6 +267,8 @@ function getAgentRunActivity(metadata: RoomMessage["metadata"]) {
       },
     ];
   });
+
+  return activity.slice(-1);
 }
 
 function getGeneratedFiles(metadata: RoomMessage["metadata"]) {

@@ -49,10 +49,12 @@ export function publicAgentRunActivity(run: AgentRun, events: AgentRunEvent[]): 
   }
 
   const activeStatus = activityStatusForRun(run);
-  return items.map((item, index) => ({
+  const visibleItems = items.map((item, index) => ({
     ...item,
     status: index === items.length - 1 ? activeStatus : "completed",
   }));
+
+  return visibleItems.slice(-1);
 }
 
 function defaultActivityForRun(run: AgentRun): AgentRunActivity {

@@ -5,7 +5,12 @@ import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
-import { getCoordinatorAgent, isDevelopmentAgent } from "@/lib/agents/development-agent";
+import {
+  DEVELOPMENT_AGENT_ROOM_ID,
+  getCoordinatorAgent,
+  isDevelopmentAgent,
+} from "@/lib/agents/development-agent";
+import { backfillDevelopmentAgentRequestMirrors } from "@/server/agents/development-request-mirror";
 import { isActiveVideoMeeting } from "@/lib/video-meetings/active";
 
 export async function getOfficeView(userId: string) {
@@ -25,6 +30,10 @@ export async function getRoomView(userId: string, roomId: string, options: { thr
   const [room, membership] = await Promise.all([source.getRoom(roomId), requireRoomMember(userId, roomId)]);
   if (!room || !room.isActive) {
     return null;
+  }
+
+  if (roomId === DEVELOPMENT_AGENT_ROOM_ID) {
+    await backfillDevelopmentAgentRequestMirrors({ source });
   }
 
   const userMemberships = shouldUseMockData()
@@ -77,7 +86,7 @@ export async function getRoomView(userId: string, roomId: string, options: { thr
   const coordinatorAgent = getCoordinatorAgent();
   const guestAgents =
     roomId === "meeting"
-      ? [coordinatorAgent, ...agents.filter((agent) => writableRoomIds.has(agent.roomId))]
+      ? [coordinatorAgent, ...agents.filter((agent) => writableRoomIds.has(agent.roomId) || isDevelopmentAgent(agent))]
       : developmentAgent && developmentAgent.id !== residentAgent?.id
         ? [developmentAgent]
         : [];
