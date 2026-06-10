@@ -522,7 +522,7 @@ async function recordProgress(
 }
 
 async function getAgentRunById(source: AgentRunSource, runId: string) {
-  return (await source.listAgentRuns()).find((item) => item.id === runId) ?? null;
+  return source.getAgentRunById(runId);
 }
 
 async function assertAgentRunActive(source: AgentRunSource, runId: string, signal: AbortSignal) {

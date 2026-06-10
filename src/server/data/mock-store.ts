@@ -540,6 +540,10 @@ export const mockStore = {
     return [...state().agentRuns].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   },
 
+  getAgentRunById(runId: string) {
+    return state().agentRuns.find((run) => run.id === runId) ?? null;
+  },
+
   addAgentRunEvent(agentRunId: string, eventType: string, payload: Record<string, unknown>) {
     const event: AgentRunEvent = {
       id: id(),

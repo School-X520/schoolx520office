@@ -1474,6 +1474,12 @@ export const supabaseStore = {
     return rows(assertOk(data, error)).map(agentRunFrom);
   },
 
+  async getAgentRunById(runId: string) {
+    const { data, error } = await db().from("agent_runs").select("*").eq("id", runId).maybeSingle();
+    const value = row(assertOk(data, error));
+    return value ? agentRunFrom(value) : null;
+  },
+
   async addAgentRunEvent(agentRunId: string, eventType: string, payload: Record<string, unknown>) {
     const { data, error } = await db()
       .from("agent_run_events")

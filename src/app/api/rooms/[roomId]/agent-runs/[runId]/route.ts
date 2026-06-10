@@ -14,7 +14,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ roomId: st
     await requireRoomMember(user.userId, roomId);
 
     const source = shouldUseMockData() ? mockStore : supabaseStore;
-    const run = (await source.listAgentRuns()).find((item) => item.id === runId && item.roomId === roomId);
+    const candidate = await source.getAgentRunById(runId);
+    const run = candidate && candidate.roomId === roomId ? candidate : null;
 
     if (!run) {
       const error = new Error("봇 실행을 찾을 수 없습니다.") as Error & { status: number };

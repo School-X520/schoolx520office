@@ -7,7 +7,7 @@ import { updateRoomMemory } from "@/server/memory/domain-memory-service";
 
 export async function finalizeAgentRun(agentRunId: string) {
   const source = shouldUseMockData() ? mockStore : supabaseStore;
-  const run = (await source.listAgentRuns()).find((item) => item.id === agentRunId);
+  const run = await source.getAgentRunById(agentRunId);
   if (!run) {
     return null;
   }
@@ -22,14 +22,26 @@ export async function finalizeAgentRun(agentRunId: string) {
     lastMessageAt: output?.createdAt ?? new Date().toISOString(),
   });
 
+  // 기존 keyFacts는 보존하되 중복 텍스트를 제거하고 최근 50개로 제한한다.
+  // (과거에는 매 실행마다 의미 없는 고정 문구를 무한 추가해 프롬프트 토큰을 낭비했다.)
+  const existingKeyFacts = (await source.getMemory(run.roomId))?.keyFacts ?? [];
+  const seenFactText = new Set<string>();
+  const keyFacts = existingKeyFacts
+    .filter((fact) => {
+      const text = typeof fact.text === "string" ? fact.text.trim() : "";
+      if (!text || seenFactText.has(text)) {
+        return false;
+      }
+      seenFactText.add(text);
+      return true;
+    })
+    .slice(-50);
+
   await updateRoomMemory(
     run.roomId,
     {
       summary,
-      keyFacts: [
-        ...((await source.getMemory(run.roomId))?.keyFacts ?? []),
-        { id: crypto.randomUUID(), text: "최근 봇 실행 결과가 domain_memory에 반영되었습니다." },
-      ],
+      keyFacts,
     },
     agentRunId,
   );

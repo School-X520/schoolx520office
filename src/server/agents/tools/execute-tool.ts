@@ -12,7 +12,7 @@ import type { AgentRun, RoomMessage } from "@/types/domain";
 
 export async function executeTool(agentRunId: string, toolName: string, input: Record<string, unknown>) {
   const source = shouldUseMockData() ? mockStore : supabaseStore;
-  const run = (await source.listAgentRuns()).find((item) => item.id === agentRunId);
+  const run = await source.getAgentRunById(agentRunId);
   const definition = toolRegistry.find((tool) => tool.name === toolName);
 
   if (!run || !definition) {
