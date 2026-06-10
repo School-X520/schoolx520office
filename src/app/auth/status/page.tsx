@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
 
+import { isAuthDebugEnabled } from "@/lib/env";
 import { getSupabaseProjectRef, isCurrentSupabaseAuthCookie } from "@/lib/supabase/auth-cookies";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { readAppSessionUser } from "@/server/auth/app-session";
@@ -9,6 +11,10 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function AuthStatusPage() {
+  if (!isAuthDebugEnabled()) {
+    notFound();
+  }
+
   const cookieStore = await cookies();
   const cookieNames = cookieStore.getAll().map((cookie) => cookie.name).sort();
   const supabaseCookieNames = cookieNames.filter((name) => name.startsWith("sb-"));

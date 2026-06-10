@@ -40,6 +40,7 @@ export function setAppSessionCookie(response: NextResponse, user: AppSessionUser
     path: "/",
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     maxAge: APP_SESSION_MAX_AGE,
   });
 }
@@ -49,6 +50,7 @@ export function clearAppSessionCookie(response: NextResponse) {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     maxAge: 0,
   });
 }
@@ -99,10 +101,39 @@ function safeEqual(left: string, right: string) {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
+// 세션 서명 키는 DB 마스터 키와 분리되어야 한다 — service role 키 폴백은
+// 키 회전을 세션 무효화와 결합시키고 최고 권한 키의 노출 표면을 넓히므로
+// 프로덕션에서는 허용하지 않는다.
+export function resolveAppSessionSecret(env: {
+  APP_SESSION_SECRET?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  NODE_ENV?: string;
+}) {
+  const secret = env.APP_SESSION_SECRET?.trim();
+  if (secret) {
+    return { secret, usingFallback: false };
+  }
+  if (env.NODE_ENV === "production") {
+    throw new Error(
+      "APP_SESSION_SECRET이 설정되지 않았습니다. 프로덕션에서는 SUPABASE_SERVICE_ROLE_KEY 폴백을 허용하지 않습니다. `openssl rand -base64 32` 값을 APP_SESSION_SECRET으로 설정하세요.",
+    );
+  }
+  const fallback = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!fallback) {
+    throw new Error("APP_SESSION_SECRET이 필요합니다. .env.local에 추가하세요.");
+  }
+  return { secret: fallback, usingFallback: true };
+}
+
+let warnedDevSecretFallback = false;
+
 function getSessionSecret() {
-  const secret = process.env.APP_SESSION_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!secret) {
-    throw new Error("APP_SESSION_SECRET 또는 SUPABASE_SERVICE_ROLE_KEY가 필요합니다.");
+  const { secret, usingFallback } = resolveAppSessionSecret(process.env);
+  if (usingFallback && !warnedDevSecretFallback) {
+    warnedDevSecretFallback = true;
+    console.warn(
+      "[app-session] APP_SESSION_SECRET 미설정 — 개발 환경 한정으로 service role 키로 폴백합니다. .env.local에 APP_SESSION_SECRET을 추가하세요.",
+    );
   }
   return secret;
 }

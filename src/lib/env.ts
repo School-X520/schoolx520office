@@ -70,8 +70,60 @@ export function isServiceRoleConfigured() {
   return isSupabaseConfigured() && Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
+// next build 단계(NEXT_PHASE=phase-production-build)는 프로덕션 런타임으로 취급하지 않는다 —
+// 빌드는 env 없이도 가능해야 하고, 가드는 실제 요청 처리 시점에만 작동해야 한다.
+function isProductionRuntime() {
+  return process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build";
+}
+
 export function shouldUseMockData() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true" || !isServiceRoleConfigured();
+  const explicitMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true";
+  if (isProductionRuntime()) {
+    if (explicitMock) {
+      throw new Error(
+        "NEXT_PUBLIC_USE_MOCK_DATA=true는 프로덕션 런타임에서 허용되지 않습니다. 변수를 제거하거나 false로 설정하세요.",
+      );
+    }
+    if (!isServiceRoleConfigured()) {
+      throw new Error(
+        "프로덕션 런타임에 Supabase 환경 변수(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY)가 누락되었습니다. mock 모드로 폴백하지 않습니다.",
+      );
+    }
+    return false;
+  }
+  return explicitMock || !isServiceRoleConfigured();
+}
+
+export function isAuthDebugEnabled() {
+  return process.env.NODE_ENV !== "production" || process.env.ENABLE_AUTH_DEBUG === "true";
+}
+
+export function assertProductionEnv() {
+  if (!isProductionRuntime()) {
+    return;
+  }
+
+  const missing: string[] = [];
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) missing.push("NEXT_PUBLIC_SUPABASE_URL");
+  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) missing.push("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (!process.env.APP_SESSION_SECRET) missing.push("APP_SESSION_SECRET");
+  if (process.env.ENABLE_REAL_AGENTS === "true" && !process.env.ANTHROPIC_API_KEY) {
+    missing.push("ANTHROPIC_API_KEY(ENABLE_REAL_AGENTS=true)");
+  }
+
+  const forbidden: string[] = [];
+  if (process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true") {
+    forbidden.push("NEXT_PUBLIC_USE_MOCK_DATA=true");
+  }
+
+  if (missing.length > 0 || forbidden.length > 0) {
+    const parts = [
+      missing.length > 0 ? `누락: ${missing.join(", ")}` : null,
+      forbidden.length > 0 ? `금지: ${forbidden.join(", ")}` : null,
+    ].filter(Boolean);
+    throw new Error(`[env] 프로덕션 환경 변수 검증 실패 — ${parts.join(" / ")}`);
+  }
 }
 
 export function missingSetupMessage(scope: string) {

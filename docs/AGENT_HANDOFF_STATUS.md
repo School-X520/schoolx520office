@@ -2,6 +2,13 @@
 
 Last updated: 2026-05-10 KST
 
+> **⚠️ STALE NOTICE (2026-06-10):** 이 문서는 2026-05-10 시점 스냅샷이며 일부 내용이 낡았다.
+> 실제 현재 상태: real Claude Managed Agent adapter는 **완성**되어 있고(스켈레톤 아님),
+> 적용 마이그레이션은 **0017까지**이며, 최신 커밋 목록도 아래와 다르다.
+> 최신 종합 상태는 `docs/PROJECT_REVIEW_2026-06-10.md`를 참조할 것.
+> 인프라 식별자(Supabase project ref 등)는 보안상 이 문서에서 제거했다 — 대시보드에서 확인.
+> 아래 "rotate them before serious production use" 경고는 여전히 미이행 상태다.
+
 This document summarizes the current implementation state of `School-X 교사연구회 AI Office` so another AI agent can continue the project without re-discovering the setup. Do not paste secrets into this file. Runtime secrets live only in ignored local or deployment environment variables.
 
 ## Project Summary
@@ -110,7 +117,7 @@ Security notes:
 Supabase project ref:
 
 ```text
-dgkmqguobwihyqxtuijh
+(redacted — Supabase 대시보드에서 확인)
 ```
 
 Applied migrations:
@@ -162,7 +169,7 @@ http://localhost:3137
 - Authorized redirect URI:
 
 ```text
-https://dgkmqguobwihyqxtuijh.supabase.co/auth/v1/callback
+https://<supabase-project-ref>.supabase.co/auth/v1/callback
 ```
 
 Supabase Auth URL settings should include:

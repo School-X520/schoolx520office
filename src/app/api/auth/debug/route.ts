@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 
 import { jsonOk } from "@/lib/api";
-import { shouldUseMockData } from "@/lib/env";
+import { isAuthDebugEnabled, shouldUseMockData } from "@/lib/env";
 import { getSupabaseProjectRef, isCurrentSupabaseAuthCookie } from "@/lib/supabase/auth-cookies";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { readAppSessionUser } from "@/server/auth/app-session";
@@ -9,6 +9,10 @@ import { readAppSessionUser } from "@/server/auth/app-session";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!isAuthDebugEnabled()) {
+    return new Response(null, { status: 404 });
+  }
+
   const cookieStore = await cookies();
   const supabaseCookieNames = cookieStore
     .getAll()

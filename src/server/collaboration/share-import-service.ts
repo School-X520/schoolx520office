@@ -6,7 +6,7 @@ import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { copyRoomFileToRoom, downloadRoomFileToLocalAndOpen } from "@/server/files/file-service";
-import type { FileRecord, JsonObject, MeetingImport } from "@/types/domain";
+import type { JsonObject, MeetingImport } from "@/types/domain";
 
 type DbError = { message: string };
 type LooseDb = {
@@ -264,7 +264,10 @@ export async function shareFilesToRooms(input: {
   const sharedItems = [];
   for (const targetRoom of targetRooms) {
     for (const fileId of fileIds) {
-      const file = fileById.get(fileId) as FileRecord;
+      const file = fileById.get(fileId);
+      if (!file) {
+        throw statusError("공유할 파일을 찾을 수 없습니다.", 404);
+      }
       const summary = fileShareSummary(file.originalName, targetRoom.name);
       const item = await source.createSharedItem({
         sourceRoomId: input.sourceRoomId,
