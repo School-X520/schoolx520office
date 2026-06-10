@@ -1,23 +1,27 @@
 import { after } from "next/server";
+import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { completeAgentRun, startAgentRun } from "@/server/agents/run-agent";
 import { requireUser } from "@/server/auth/require-user";
 
 export const maxDuration = 60;
 
+const agentRunBodySchema = z.object({
+  message: z.string().max(8000).optional(),
+  mode: z.enum(["room", "meeting_guest"]).optional(),
+  threadId: z.string().max(128).optional(),
+  agentId: z.string().max(64).optional(),
+  guestSourceRoomId: z.string().max(64).optional(),
+  inputMessageId: z.string().max(128).optional(),
+  intent: z.enum(["development_request"]).optional(),
+});
+
 export async function POST(request: Request, { params }: { params: Promise<{ roomId: string }> }) {
   try {
     const { roomId } = await params;
     const user = await requireUser();
-    const body = (await request.json()) as {
-      message?: string;
-      mode?: "room" | "meeting_guest";
-      threadId?: string;
-      agentId?: string;
-      guestSourceRoomId?: string;
-      inputMessageId?: string;
-      intent?: "development_request";
-    };
+    const body = await parseJsonBody(request, agentRunBodySchema);
     const result = await startAgentRun({
       userId: user.userId,
       roomId,

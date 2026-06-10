@@ -1,4 +1,6 @@
+import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { shouldUseMockData } from "@/lib/env";
 import { createRoomMessage } from "@/server/messages/room-message-service";
 import { requireRoomMember } from "@/server/auth/require-room-member";
@@ -6,6 +8,11 @@ import { requireUser } from "@/server/auth/require-user";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
+
+const messageBodySchema = z.object({
+  content: z.string().max(8000).optional(),
+  threadId: z.string().max(128).optional(),
+});
 
 export async function GET(request: Request, { params }: { params: Promise<{ roomId: string }> }) {
   try {
@@ -25,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ roo
   try {
     const { roomId } = await params;
     const user = await requireUser();
-    const body = (await request.json()) as { content?: string; threadId?: string };
+    const body = await parseJsonBody(request, messageBodySchema);
     const message = await createRoomMessage({
       userId: user.userId,
       roomId,

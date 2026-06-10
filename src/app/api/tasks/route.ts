@@ -1,4 +1,6 @@
+import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { shouldUseMockData } from "@/lib/env";
 import { requireUser } from "@/server/auth/require-user";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
@@ -6,6 +8,14 @@ import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { statusError } from "@/lib/http-error";
 import type { Task } from "@/types/domain";
+
+const taskBodySchema = z.object({
+  roomId: z.string().max(64).optional(),
+  title: z.string().max(500).optional(),
+  description: z.string().max(4000).optional(),
+  assigneeRoomId: z.string().max(64).optional(),
+  targetRoomIds: z.array(z.string().max(64)).max(20).optional(),
+});
 
 function taskVisibleInRooms(task: Task, roomIds: Set<string>) {
   return roomIds.has(task.roomId) || (task.assigneeRoomId ? roomIds.has(task.assigneeRoomId) : false);
@@ -35,13 +45,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
-    const body = (await request.json()) as {
-      roomId?: string;
-      title?: string;
-      description?: string;
-      assigneeRoomId?: string;
-      targetRoomIds?: string[];
-    };
+    const body = await parseJsonBody(request, taskBodySchema);
     const currentRoomId = body.roomId ?? "meeting";
     const currentMembership = await requireRoomMember(user.userId, currentRoomId);
     if (!canWriteRoom(currentMembership.role)) {

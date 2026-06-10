@@ -1,10 +1,17 @@
+import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { shouldUseMockData } from "@/lib/env";
 import { requireUser } from "@/server/auth/require-user";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { statusError } from "@/lib/http-error";
+
+const decisionBodySchema = z.object({
+  title: z.string().max(500).optional(),
+  description: z.string().max(4000).optional(),
+});
 
 export async function GET(request: Request) {
   try {
@@ -25,7 +32,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
-    const body = (await request.json()) as { title?: string; description?: string };
+    const body = await parseJsonBody(request, decisionBodySchema);
     const title = body.title?.trim();
     if (!title) {
       throw statusError("결정사항 제목이 필요합니다.", 400);
