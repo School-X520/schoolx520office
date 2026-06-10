@@ -194,17 +194,17 @@
 6. `globals.css:133-146` 죽은 CSS 삭제 + diff 회귀 2건(`createdAt:""`, `Map.get as`) 수정
 7. HANDOFF 문서 시크릿 정리 + 키 로테이션 실행 (P1-4)
 
-### Phase 1 — 운영 안정화 (1~2주)
-1. 단건 조회 메서드 + listMessages/listAgentRuns limit·페이지네이션 (P0-6)
-2. `DataStore` 인터페이스 + `getDataStore()` 팩토리 (P0-7)
-3. GitHub Actions CI + Vercel 게이트 (P1-12)
-4. stuck run sweeper + maxDuration 상향 + agent_runs 원자 전이 (P1-6,7)
-5. rate limit + 방당 동시 run 1개 + 토큰 예산 알림 (P1-5)
-6. integration_tokens 암호화 (P0-5)
-7. FK 인덱스 9건 + finalizeAgentRun keyFact 정리 (P1-9,11)
-8. middleware `updateSession` + 인증 1차 게이트 (P1-2)
-9. getRoomView 최적화 + backfill 비동기화 (P1-8)
-10. error.tsx/not-found.tsx + jsonError 위생 + Sentry/health (P1-15, P2)
+### Phase 1 — 운영 안정화 (1~2주) — 🔄 진행 중 (2026-06-10)
+1. ✅ 단건 조회 메서드(`getAgentRunById`) — 핫패스 4곳 full-scan 제거. listMessages 페이지네이션은 Realtime 작업과 함께 Phase 2로 (P0-6 부분)
+2. ⬜ `DataStore` 인터페이스 + `getDataStore()` 팩토리 (P0-7) — 60+ 메서드, 별도 턴
+3. ✅ GitHub Actions CI(lint/typecheck/test/build) + packageManager 핀 (P1-12). Vercel "Require checks" 연결은 대시보드 수동 작업
+4. ⬜ stuck run sweeper + maxDuration 상향 + agent_runs 원자 전이 (P1-6,7) — 동시성, 별도 턴
+5. ⬜ rate limit + 방당 동시 run 1개 + 토큰 예산 알림 (P1-5) — **인프라 결정 필요**(Upstash vs DB vs in-memory)
+6. ⬜ integration_tokens 암호화 (P0-5) — **키 관리 결정 필요**(Vault vs KMS vs env 키) + 기존 토큰 데이터 마이그레이션
+7. ✅ FK 인덱스 9건(0018) + finalizeAgentRun keyFact 정리(중복제거+50개 상한) (P1-9,11)
+8. ⬜ middleware `updateSession` + 인증 1차 게이트 (P1-2) — Supabase SSR, 라이브 테스트 필요
+9. ⬜ getRoomView 최적화 + backfill 비동기화 (P1-8)
+10. ✅ not-found/error/global-error 바운더리 + jsonError 위생(5xx 내부메시지 차단) + `/api/health` (P1-15, P2). Sentry는 별도(의존성 추가 필요)
 
 ### Phase 2 — 제품 완성 (2~4주)
 1. **Supabase Realtime 채팅** + 스크롤 정책 + mock 요소 제거 (P0-8, P1-18,20)
