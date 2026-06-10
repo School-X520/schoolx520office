@@ -1,8 +1,6 @@
 import "server-only";
 
-import { shouldUseMockData } from "@/lib/env";
-import { mockStore } from "@/server/data/mock-store";
-import { supabaseStore } from "@/server/data/supabase-store";
+import { getDataStore } from "@/server/data/data-store";
 import { requireRoomMember } from "@/server/auth/require-room-member";
 import { shareMessageToMeeting, importMeetingMessageToRoom } from "@/server/collaboration/share-import-service";
 import { toolRegistry } from "@/server/agents/tools/tool-registry";
@@ -11,7 +9,7 @@ import { hasAllRoomSearchAccess } from "@/lib/agents/development-agent";
 import type { AgentRun, RoomMessage } from "@/types/domain";
 
 export async function executeTool(agentRunId: string, toolName: string, input: Record<string, unknown>) {
-  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const source = getDataStore();
   const run = await source.getAgentRunById(agentRunId);
   const definition = toolRegistry.find((tool) => tool.name === toolName);
 
@@ -58,7 +56,7 @@ export async function executeTool(agentRunId: string, toolName: string, input: R
 }
 
 async function runTool(run: AgentRun, toolName: string, input: Record<string, unknown>) {
-  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const source = getDataStore();
   const userId = requireInitiator(run);
 
   if (toolName === "read_room_summary") {
@@ -216,7 +214,7 @@ function ensureRoomInAgentScope(run: AgentRun, roomId: string) {
 }
 
 async function ensureRoomReadableInAgentScope(run: AgentRun, roomId: string) {
-  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const source = getDataStore();
   const agent = run.agentId ? await source.getAgent(run.agentId) : null;
   if (hasAllRoomSearchAccess(agent)) {
     return;

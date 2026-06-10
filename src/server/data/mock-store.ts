@@ -15,6 +15,7 @@ import type {
   AgentPersonaVersion,
   AgentRun,
   AgentRunEvent,
+  AllowedUser,
   AuditLog,
   CoordinatorBriefing,
   Decision,
@@ -35,6 +36,19 @@ import type {
   VideoMeetingArtifact,
   VideoMeetingEvent,
 } from "@/types/domain";
+
+type MockIntegrationToken = {
+  provider: string;
+  refreshToken?: string | null;
+  accessToken?: string | null;
+  expiresAt?: string | null;
+  scope?: string | null;
+  tokenType?: string | null;
+  connectedBy?: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
 
 type MockState = {
   threads: RoomThread[];
@@ -58,6 +72,7 @@ type MockState = {
   coordinatorBriefings: CoordinatorBriefing[];
   removedFileAccess: Array<{ roomId: string; fileId: string }>;
   sharedFileAccess: Array<{ roomId: string; fileId: string; accessLevel: FileRecord["accessLevel"] }>;
+  integrationTokens: MockIntegrationToken[];
 };
 
 const globalKey = "__schoolx_mock_state__";
@@ -191,6 +206,7 @@ function initialState(): MockState {
     coordinatorBriefings: [],
     removedFileAccess: [],
     sharedFileAccess: [],
+    integrationTokens: [],
   };
 }
 
@@ -241,7 +257,7 @@ export const mockStore = {
   ) {
     const agent = seedAgents.find((item) => item.id === agentId) as Agent | undefined;
     if (!agent) {
-      return null;
+      throw new Error("봇을 찾을 수 없습니다.");
     }
     const timestamp = now();
     agent.personaDraft = input.personaDraft ?? agent.personaDraft;
@@ -265,7 +281,10 @@ export const mockStore = {
     return agent;
   },
 
-  addAgentPersonaVersion(input: Omit<AgentPersonaVersion, "id" | "createdAt"> & Partial<AgentPersonaVersion>) {
+  addAgentPersonaVersion(
+    input: Pick<AgentPersonaVersion, "agentId" | "roomId" | "persona" | "versionNo"> &
+      Partial<Omit<AgentPersonaVersion, "id" | "createdAt">>,
+  ) {
     return {
       id: id(),
       agentId: input.agentId,
@@ -305,6 +324,38 @@ export const mockStore = {
     return user;
   },
 
+  upsertAllowedUser(input: {
+    email: string;
+    invitedBy?: string | null;
+    notes?: string | null;
+    isActive?: boolean;
+    isAdmin?: boolean;
+  }) {
+    const email = input.email.toLowerCase();
+    const existing = seedAllowedUsers.find((user) => user.email === email);
+    if (existing) {
+      if (input.invitedBy !== undefined) {
+        existing.invitedBy = input.invitedBy;
+      }
+      if (input.notes !== undefined) {
+        existing.notes = input.notes;
+      }
+      existing.isActive = input.isActive ?? true;
+      existing.isAdmin = input.isAdmin ?? false;
+      return existing;
+    }
+    const user: AllowedUser = {
+      email,
+      invitedBy: input.invitedBy ?? null,
+      invitedAt: now(),
+      notes: input.notes ?? null,
+      isActive: input.isActive ?? true,
+      isAdmin: input.isAdmin ?? false,
+    };
+    seedAllowedUsers.push(user);
+    return user;
+  },
+
   listUserProfiles() {
     return [mockUser];
   },
@@ -328,6 +379,31 @@ export const mockStore = {
     mockUser.avatarUrl = patch.avatarUrl ?? null;
     mockUser.bio = patch.bio ?? null;
     mockUser.updatedAt = now();
+    return mockUser;
+  },
+
+  updateUserAdminByEmail(email: string, isAdmin: boolean) {
+    if (mockUser.email.toLowerCase() !== email.toLowerCase()) {
+      return null;
+    }
+    mockUser.isAdmin = isAdmin;
+    mockUser.updatedAt = now();
+    return mockUser;
+  },
+
+  ensureUserProfile(input: {
+    userId: string;
+    email: string;
+    displayName: string;
+    avatarUrl?: string | null;
+    isAdmin?: boolean;
+  }) {
+    // mock은 단일 사용자(mockUser)만 표현한다. 승인 사용자 온보딩과 동일하게 pending 멤버십만 반영한다.
+    if (input.isAdmin) {
+      mockUser.isAdmin = true;
+      mockUser.updatedAt = now();
+    }
+    this.applyPendingRoomMemberships(input.email, input.userId);
     return mockUser;
   },
 
@@ -375,6 +451,50 @@ export const mockStore = {
     return state()
       .pendingMemberships.filter((membership) => !email || membership.email === email.toLowerCase())
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  },
+
+  // 실제 스토어는 audit_logs를 재생해 pending 멤버십을 복원하지만, mock은 직접 저장본을 그대로 반환한다.
+  listPendingRoomMembershipsFromAudit(email?: string) {
+    return this.listPendingRoomMemberships(email);
+  },
+
+  grantAllRoomMemberships(userId: string, role: RoomMembership["role"] = "admin") {
+    return this.listRooms().map((room) => this.upsertMembership({ userId, roomId: room.id, role }));
+  },
+
+  getIntegrationToken(provider: string): MockIntegrationToken | null {
+    return state().integrationTokens.find((token) => token.provider === provider) ?? null;
+  },
+
+  upsertIntegrationToken(input: {
+    provider: string;
+    refreshToken?: string | null;
+    accessToken?: string | null;
+    expiresAt?: string | null;
+    scope?: string | null;
+    tokenType?: string | null;
+    connectedBy?: string | null;
+    metadata?: Record<string, unknown>;
+  }): MockIntegrationToken {
+    const existing = state().integrationTokens.find((token) => token.provider === input.provider);
+    const next: MockIntegrationToken = {
+      provider: input.provider,
+      refreshToken: input.refreshToken ?? null,
+      accessToken: input.accessToken ?? null,
+      expiresAt: input.expiresAt ?? null,
+      scope: input.scope ?? null,
+      tokenType: input.tokenType ?? null,
+      connectedBy: input.connectedBy ?? null,
+      metadata: input.metadata ?? {},
+      createdAt: existing?.createdAt ?? now(),
+      updatedAt: now(),
+    };
+    if (existing) {
+      Object.assign(existing, next);
+      return existing;
+    }
+    state().integrationTokens.push(next);
+    return next;
   },
 
   upsertPendingRoomMembership(input: {
@@ -470,7 +590,8 @@ export const mockStore = {
   updateThread(threadId: string, patch: Partial<RoomThread>) {
     const thread = this.getThread(threadId);
     if (!thread) {
-      return null;
+      // 실제 스토어(supabaseStore)는 누락 시 throw하고 non-null을 반환하므로 계약을 맞춘다.
+      throw new Error("대화를 찾을 수 없습니다.");
     }
     Object.assign(thread, patch, { updatedAt: now() });
     return thread;
@@ -482,11 +603,20 @@ export const mockStore = {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   },
 
-  createMessage(input: Pick<RoomMessage, "roomId" | "type" | "content"> & Partial<RoomMessage>) {
-    const thread = input.threadId ? this.getThread(input.threadId) : this.ensureRoomThread(input.roomId);
+  createMessage(input: {
+    roomId: string;
+    threadId?: string | null;
+    type: RoomMessage["type"];
+    content: string;
+    senderUserId?: string | null;
+    senderAgentId?: string | null;
+    agentRunId?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    const thread = (input.threadId ? this.getThread(input.threadId) : null) ?? this.ensureRoomThread(input.roomId);
     const message: RoomMessage = {
       id: id(),
-      threadId: thread?.id ?? input.threadId ?? `${input.roomId}-thread-default`,
+      threadId: thread.id,
       senderUserId: input.senderUserId ?? mockUser.userId,
       senderAgentId: input.senderAgentId ?? null,
       agentRunId: input.agentRunId ?? null,
@@ -497,11 +627,11 @@ export const mockStore = {
       content: input.content,
     };
     state().messages.push(message);
-    this.updateThread(message.threadId, { lastMessageAt: message.createdAt });
+    this.updateThread(thread.id, { lastMessageAt: message.createdAt });
     return message;
   },
 
-  createAgentRun(input: Omit<AgentRun, "id" | "startedAt" | "tokenUsage" | "metadata" | "status"> & Partial<AgentRun>) {
+  createAgentRun(input: Partial<AgentRun> & Pick<AgentRun, "roomId" | "mode" | "runType">) {
     const thread = input.threadId ? this.getThread(input.threadId) : this.ensureRoomThread(input.roomId);
     const run: AgentRun = {
       id: id(),
@@ -530,7 +660,7 @@ export const mockStore = {
   updateAgentRun(runId: string, patch: Partial<AgentRun>) {
     const run = state().agentRuns.find((item) => item.id === runId);
     if (!run) {
-      return null;
+      throw new Error("봇 실행을 찾을 수 없습니다.");
     }
     Object.assign(run, patch);
     return run;
@@ -586,7 +716,7 @@ export const mockStore = {
   updateMemory(roomId: string, patch: Partial<DomainMemory>) {
     const memory = this.getMemory(roomId);
     if (!memory) {
-      return null;
+      throw new Error("방 메모리를 찾을 수 없습니다.");
     }
     Object.assign(memory, patch, { updatedAt: now() });
     return memory;
@@ -651,6 +781,21 @@ export const mockStore = {
     return file;
   },
 
+  createFileVersion(input: {
+    fileId: string;
+    storagePath: string;
+    createdBy?: string | null;
+    changeSummary: string;
+    agentRunId?: string | null;
+  }) {
+    const file = state().files.find((item) => item.id === input.fileId);
+    if (!file) {
+      throw new Error("파일을 찾을 수 없습니다.");
+    }
+    file.versionNo = (file.versionNo ?? 1) + 1;
+    return { ...file, accessLevel: "write" as const };
+  },
+
   removeFileFromRoom(roomId: string, fileId: string) {
     state().removedFileAccess.push({ roomId, fileId });
     state().sharedFileAccess = state().sharedFileAccess.filter(
@@ -685,7 +830,7 @@ export const mockStore = {
     );
   },
 
-  createSharedItem(input: Omit<SharedItem, "id" | "createdAt" | "metadata" | "targetRoomId"> & Partial<SharedItem>) {
+  createSharedItem(input: Partial<SharedItem> & Pick<SharedItem, "sourceRoomId" | "title" | "summary">) {
     const item: SharedItem = {
       id: id(),
       sourceRoomId: input.sourceRoomId,
@@ -721,7 +866,7 @@ export const mockStore = {
     );
   },
 
-  createImport(input: Omit<MeetingImport, "id" | "createdAt" | "metadata" | "meetingRoomId" | "status"> & Partial<MeetingImport>) {
+  createImport(input: Partial<MeetingImport> & Pick<MeetingImport, "targetRoomId">) {
     const item: MeetingImport = {
       id: id(),
       meetingRoomId: input.meetingRoomId ?? "meeting",
@@ -747,7 +892,7 @@ export const mockStore = {
   updateImport(importId: string, patch: Partial<MeetingImport>) {
     const item = state().imports.find((meetingImport) => meetingImport.id === importId);
     if (!item) {
-      return null;
+      throw new Error("반입 항목을 찾을 수 없습니다.");
     }
     Object.assign(item, patch, {
       metadata: {
@@ -762,7 +907,7 @@ export const mockStore = {
     return state().decisions.filter((decision) => !roomId || decision.roomId === roomId);
   },
 
-  createDecision(input: Omit<Decision, "id" | "createdAt"> & Partial<Decision>) {
+  createDecision(input: Partial<Decision> & Pick<Decision, "roomId" | "title">) {
     const decision: Decision = {
       id: id(),
       roomId: input.roomId,
@@ -779,7 +924,7 @@ export const mockStore = {
   updateDecision(decisionId: string, patch: Partial<Decision>) {
     const decision = state().decisions.find((item) => item.id === decisionId);
     if (!decision) {
-      return null;
+      throw new Error("결정 항목을 찾을 수 없습니다.");
     }
     Object.assign(decision, patch);
     return decision;
@@ -795,7 +940,7 @@ export const mockStore = {
     return state().tasks.filter((task) => !roomId || isTaskVisibleInRoom(task, roomId));
   },
 
-  createTask(input: Omit<Task, "id" | "createdAt" | "updatedAt" | "status" | "metadata"> & Partial<Task>) {
+  createTask(input: Partial<Task> & Pick<Task, "roomId" | "title">) {
     const task: Task = {
       id: id(),
       roomId: input.roomId,
@@ -815,7 +960,7 @@ export const mockStore = {
     return task;
   },
 
-  addAuditLog(input: Omit<AuditLog, "id" | "createdAt" | "metadata"> & Partial<AuditLog>) {
+  addAuditLog(input: Partial<AuditLog> & Pick<AuditLog, "action">) {
     const log: AuditLog = {
       id: id(),
       actorUserId: input.actorUserId ?? mockUser.userId,
@@ -839,7 +984,7 @@ export const mockStore = {
     return state().memoryReviews;
   },
 
-  addMemoryReview(input: Omit<MemoryWriteReview, "id" | "createdAt" | "status"> & Partial<MemoryWriteReview>) {
+  addMemoryReview(input: Partial<MemoryWriteReview> & Pick<MemoryWriteReview, "roomId" | "proposedMemory">) {
     const review: MemoryWriteReview = {
       id: id(),
       roomId: input.roomId,
@@ -864,7 +1009,7 @@ export const mockStore = {
     return state().videoMeetings.find((meeting) => meeting.id === meetingId) ?? null;
   },
 
-  createVideoMeeting(input: Omit<VideoMeeting, "id" | "createdAt" | "updatedAt" | "status" | "embedAllowed" | "metadata"> & Partial<VideoMeeting>) {
+  createVideoMeeting(input: Partial<VideoMeeting> & Pick<VideoMeeting, "roomId" | "provider" | "title">) {
     const meeting: VideoMeeting = {
       id: id(),
       roomId: input.roomId,
@@ -898,13 +1043,13 @@ export const mockStore = {
   updateVideoMeeting(meetingId: string, patch: Partial<VideoMeeting>) {
     const meeting = this.getVideoMeeting(meetingId);
     if (!meeting) {
-      return null;
+      throw new Error("회의를 찾을 수 없습니다.");
     }
     Object.assign(meeting, patch, { updatedAt: now() });
     return meeting;
   },
 
-  addVideoArtifact(input: Omit<VideoMeetingArtifact, "id" | "createdAt" | "status" | "metadata"> & Partial<VideoMeetingArtifact>) {
+  addVideoArtifact(input: Partial<VideoMeetingArtifact> & Pick<VideoMeetingArtifact, "videoMeetingId" | "artifactType" | "title">) {
     const artifact: VideoMeetingArtifact = {
       id: id(),
       videoMeetingId: input.videoMeetingId,
@@ -927,7 +1072,7 @@ export const mockStore = {
     return state().videoArtifacts.filter((artifact) => artifact.videoMeetingId === meetingId);
   },
 
-  addVideoEvent(input: Omit<VideoMeetingEvent, "id" | "createdAt" | "payload"> & Partial<VideoMeetingEvent>) {
+  addVideoEvent(input: Partial<VideoMeetingEvent> & Pick<VideoMeetingEvent, "videoMeetingId" | "roomId" | "eventType">) {
     const event: VideoMeetingEvent = {
       id: id(),
       videoMeetingId: input.videoMeetingId,
@@ -952,7 +1097,7 @@ export const mockStore = {
       .slice(0, limit);
   },
 
-  createRoomBriefing(input: Omit<RoomBriefing, "id" | "createdAt" | "status" | "metadata"> & Partial<RoomBriefing>) {
+  createRoomBriefing(input: Partial<RoomBriefing> & Pick<RoomBriefing, "roomId" | "periodStart" | "periodEnd" | "summary">) {
     const briefing: RoomBriefing = {
       id: id(),
       roomId: input.roomId,
@@ -980,7 +1125,7 @@ export const mockStore = {
   },
 
   createCoordinatorBriefing(
-    input: Omit<CoordinatorBriefing, "id" | "createdAt" | "metadata"> & Partial<CoordinatorBriefing>,
+    input: Partial<CoordinatorBriefing> & Pick<CoordinatorBriefing, "periodStart" | "periodEnd" | "summary">,
   ) {
     const briefing: CoordinatorBriefing = {
       id: id(),

@@ -1,12 +1,10 @@
 import "server-only";
 
-import { shouldUseMockData } from "@/lib/env";
-import { mockStore } from "@/server/data/mock-store";
-import { supabaseStore } from "@/server/data/supabase-store";
+import { getDataStore } from "@/server/data/data-store";
 import { updateRoomMemory } from "@/server/memory/domain-memory-service";
 
 export async function finalizeAgentRun(agentRunId: string) {
-  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  const source = getDataStore();
   const run = await source.getAgentRunById(agentRunId);
   if (!run) {
     return null;

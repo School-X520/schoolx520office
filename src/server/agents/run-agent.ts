@@ -1,6 +1,5 @@
 import "server-only";
 
-import { shouldUseMockData } from "@/lib/env";
 import { AnthropicApiError } from "@/lib/anthropic/managed-agents-api";
 import { AGENT_RUN_PROGRESS_EVENT, agentRunProgressPayload } from "@/server/agents/agent-run-activity";
 import { getAgentAdapter } from "@/server/agents/get-agent-adapter";
@@ -11,8 +10,7 @@ import {
   getAgentStartupContext,
   getProjectObserverContext,
 } from "@/server/memory/domain-memory-service";
-import { mockStore } from "@/server/data/mock-store";
-import { supabaseStore } from "@/server/data/supabase-store";
+import { getDataStore } from "@/server/data/data-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { ForbiddenError } from "@/server/auth/errors";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
@@ -103,7 +101,7 @@ class AgentRunCancelledError extends Error {
 }
 
 function getSource() {
-  return shouldUseMockData() ? mockStore : supabaseStore;
+  return getDataStore();
 }
 
 type AgentRunSource = ReturnType<typeof getSource>;
