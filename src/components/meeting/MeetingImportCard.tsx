@@ -6,6 +6,7 @@ import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { Bot, ListChecks, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/layout/StatusPill";
+import { meetingImportStatusLabel } from "@/lib/status-labels";
 import type { MeetingImport } from "@/types/domain";
 
 export function MeetingImportCard({ item }: { item: MeetingImport }) {
@@ -48,7 +49,7 @@ export function MeetingImportCard({ item }: { item: MeetingImport }) {
     <article className="motion-continuity-item rounded-lg border border-sage/25 bg-sage/10 p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <StatusPill tone="sage">메인 회의방에서 가져옴</StatusPill>
-        <StatusPill tone={status === "processed" ? "gold" : "neutral"}>{status}</StatusPill>
+        <StatusPill tone={status === "processed" ? "gold" : "neutral"}>{meetingImportStatusLabel(status)}</StatusPill>
       </div>
       <h3 className="font-semibold text-balance">{title}</h3>
       <p className="mt-1 text-sm text-pretty text-ink-soft">봇에게 반영시키거나 할 일로 전환할 수 있습니다.</p>

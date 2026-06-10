@@ -8,6 +8,7 @@ import { ArrowDownToLine, ExternalLink, FolderOpen, Trash2, X } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/form-controls";
 import { StatusPill } from "@/components/layout/StatusPill";
+import { roomTypeLabel } from "@/lib/status-labels";
 import type { RoomType, SharedItem } from "@/types/domain";
 
 type ImportTargetRoom = {
@@ -253,7 +254,7 @@ function ImportToRoomsDialog({ item }: { item: SharedItem }) {
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block font-medium">{displayRoomName(room.name)}</span>
-                  <span className="text-xs text-ink-soft">{room.type}</span>
+                  <span className="text-xs text-ink-soft">{roomTypeLabel(room.type)}</span>
                 </span>
               </label>
             ))}

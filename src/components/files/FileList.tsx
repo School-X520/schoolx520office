@@ -9,6 +9,7 @@ import { FileDownloadButton } from "@/components/files/FileDownloadButton";
 import { FileUploadForm } from "@/components/files/FileUploadForm";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { Button } from "@/components/ui/button";
+import { roomTypeLabel } from "@/lib/status-labels";
 import { cn } from "@/lib/utils/cn";
 import type { FileRecord, RoomType } from "@/types/domain";
 
@@ -195,7 +196,7 @@ function FileShareToRoomsDialog({
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{displayRoomName(room.name)}</span>
-                  <span className="text-xs text-ink-soft">{room.type}</span>
+                  <span className="text-xs text-ink-soft">{roomTypeLabel(room.type)}</span>
                 </span>
               </label>
             ))}

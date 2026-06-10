@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Lock, Users } from "lucide-react";
+import { Lock } from "lucide-react";
 import { StatusPill } from "@/components/layout/StatusPill";
 import { cn } from "@/lib/utils/cn";
 import type { Agent, Room } from "@/types/domain";
@@ -8,13 +8,11 @@ export function RoomCard({
   room,
   agent,
   accessible,
-  onlineCount = 1,
   featured,
 }: {
   room: Room;
   agent?: Agent;
   accessible: boolean;
-  onlineCount?: number;
   featured?: boolean;
 }) {
   const className = cn(
@@ -29,10 +27,7 @@ export function RoomCard({
           {room.icon}
         </span>
         {accessible ? (
-          <StatusPill tone={room.type === "meeting" ? "gold" : "sage"}>
-            <Users className="size-3" />
-            {onlineCount}
-          </StatusPill>
+          <StatusPill tone={room.type === "meeting" ? "gold" : "sage"}>열림</StatusPill>
         ) : (
           <StatusPill tone="neutral">
             <Lock className="size-3" />

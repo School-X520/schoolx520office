@@ -38,14 +38,18 @@ export function MeetingSidePanel({
       <VideoMeetingPanel activeMeeting={activeMeeting ?? null} accountEmail={accountEmail} compact />
       <WarmCard className="office-side-card office-recent-card">
         <p className="mb-3 text-sm font-semibold">최근 공유 카드</p>
-        <div className="space-y-2">
-          {(sharedItems.length ? sharedItems : mockShared()).slice(0, 3).map((item) => (
-            <div key={item.id} className="rounded-md border border-line bg-white/35 p-3">
-              <p className="line-clamp-1 text-sm font-medium">{item.title}</p>
-              <p className="office-recent-summary line-clamp-2 text-xs text-ink-soft">{item.summary}</p>
-            </div>
-          ))}
-        </div>
+        {sharedItems.length ? (
+          <div className="space-y-2">
+            {sharedItems.slice(0, 3).map((item) => (
+              <div key={item.id} className="rounded-md border border-line bg-white/35 p-3">
+                <p className="line-clamp-1 text-sm font-medium">{item.title}</p>
+                <p className="office-recent-summary line-clamp-2 text-xs text-ink-soft">{item.summary}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-ink-soft">아직 회의방으로 공유된 카드가 없습니다.</p>
+        )}
       </WarmCard>
       <WarmCard className="office-side-card office-flow-card">
         <p className="text-sm font-semibold">데이터 흐름</p>
@@ -64,21 +68,4 @@ function Action({ href, icon, label }: { href: string; icon: React.ReactNode; la
       </a>
     </Button>
   );
-}
-
-function mockShared(): SharedItem[] {
-  return [
-    {
-      id: "mock-shared-1",
-      sourceRoomId: "finance",
-      targetRoomId: "meeting",
-      title: "예산 가능성 검토",
-      summary: "과학관 AI교육 연구회 예산 범위와 증빙 필요 항목을 확인해야 합니다.",
-      createdAt: new Date().toISOString(),
-      sharedBy: null,
-      sourceMessageId: null,
-      sourceFileId: null,
-      metadata: {},
-    },
-  ];
 }

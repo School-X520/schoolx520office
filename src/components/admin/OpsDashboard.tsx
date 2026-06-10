@@ -2,6 +2,7 @@ import { AlertTriangle, Bot, Database, ScrollText, Video } from "lucide-react";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { StatusPill } from "@/components/layout/StatusPill";
 import { Button } from "@/components/ui/button";
+import { agentRunStatusLabel } from "@/lib/status-labels";
 import type { AgentRun, AuditLog, MemoryWriteReview } from "@/types/domain";
 
 export function OpsDashboard({
@@ -22,10 +23,10 @@ export function OpsDashboard({
         <p className="text-sm text-pretty text-ink-soft">개발부서가 에이전트 실행, 메모리 리뷰, 감사 로그와 위험 신호를 확인합니다.</p>
       </div>
       <div className="grid gap-4 md:grid-cols-4">
-        <Metric icon={<Bot className="size-4" />} label="agent_runs" value={agentRuns.length} />
-        <Metric icon={<AlertTriangle className="size-4" />} label="failed" value={failed.length} />
-        <Metric icon={<Database className="size-4" />} label="requires_action" value={requiresAction.length} />
-        <Metric icon={<ScrollText className="size-4" />} label="memory_review" value={memoryReviews.filter((review) => review.status === "pending").length} />
+        <Metric icon={<Bot className="size-4" />} label="에이전트 실행" value={agentRuns.length} />
+        <Metric icon={<AlertTriangle className="size-4" />} label="실패" value={failed.length} />
+        <Metric icon={<Database className="size-4" />} label="조치 필요" value={requiresAction.length} />
+        <Metric icon={<ScrollText className="size-4" />} label="메모리 검토 대기" value={memoryReviews.filter((review) => review.status === "pending").length} />
       </div>
       <WarmCard>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -48,7 +49,7 @@ export function OpsDashboard({
             <div key={run.id} className="rounded-md border border-line bg-white/35 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="truncate text-sm font-medium">{run.agentId ?? "agent"} · {run.roomId}</p>
-                <StatusPill tone={run.status === "failed" ? "terracotta" : "neutral"}>{run.status}</StatusPill>
+                <StatusPill tone={run.status === "failed" ? "terracotta" : "neutral"}>{agentRunStatusLabel(run.status)}</StatusPill>
               </div>
               <p className="mt-1 text-xs text-ink-soft">{run.mode} · {run.runType}</p>
             </div>

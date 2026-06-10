@@ -8,6 +8,7 @@ import { ListChecks, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TextArea, TextInput } from "@/components/ui/form-controls";
 import { StatusPill } from "@/components/layout/StatusPill";
+import { roomTypeLabel, taskStatusLabel } from "@/lib/status-labels";
 import type { Decision, Room, Task } from "@/types/domain";
 
 export function DecisionTaskPanel({
@@ -75,7 +76,7 @@ export function DecisionTaskPanel({
                     ))}
                   </div>
                 </div>
-                <StatusPill tone={task.status === "done" ? "gold" : "sage"}>{task.status}</StatusPill>
+                <StatusPill tone={task.status === "done" ? "gold" : "sage"}>{taskStatusLabel(task.status)}</StatusPill>
               </div>
             </li>
           ))}
@@ -311,7 +312,7 @@ function TaskDialog({ roomId, taskTargetRooms }: { roomId: string; taskTargetRoo
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block font-medium">{displayRoomName(room.name)}</span>
-                    <span className="text-xs text-ink-soft">{room.type}</span>
+                    <span className="text-xs text-ink-soft">{roomTypeLabel(room.type)}</span>
                   </span>
                 </label>
               ))}

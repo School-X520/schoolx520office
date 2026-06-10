@@ -4,12 +4,12 @@ import { ActiveVideoMeetingBanner } from "@/components/video-meetings/ActiveVide
 import { EmojiBadge } from "@/components/layout/EmojiBadge";
 import { MemberAvatarStack } from "@/components/layout/MemberAvatarStack";
 import { StatusPill } from "@/components/layout/StatusPill";
+import { roomTypeLabel } from "@/lib/status-labels";
 import { Button } from "@/components/ui/button";
 import { WarmCard } from "@/components/layout/WarmCard";
 import { RoomChat } from "@/components/rooms/RoomChat";
 import { RoomRightPanel } from "@/components/rooms/RoomRightPanel";
 import { RoomThreadControls } from "@/components/rooms/RoomThreadControls";
-import { RoomPresence } from "@/components/realtime/RoomPresence";
 import { VideoMeetingPanel } from "@/components/video-meetings/VideoMeetingPanel";
 import type { RoomViewModel, UserProfile } from "@/types/domain";
 
@@ -30,12 +30,11 @@ export function RoomWorkspace({ view, user }: { view: RoomViewModel; user: UserP
               <div className="min-w-0">
                 <h1 className="truncate text-2xl font-semibold">{view.room.name}</h1>
                 <div className="mt-1 flex flex-wrap gap-2">
-                  <StatusPill tone="neutral">{view.room.type}</StatusPill>
+                  <StatusPill tone="neutral">{roomTypeLabel(view.room.type)}</StatusPill>
                   <StatusPill tone={view.agent ? "sage" : "gold"}>
                     <Bot className="size-3" />
                     {view.agent ? `${view.agent.name} 대기` : "상주 봇 없음"}
                   </StatusPill>
-                  <RoomPresence roomId={view.room.id} />
                 </div>
               </div>
             </div>
