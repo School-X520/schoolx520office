@@ -1481,6 +1481,29 @@ export const supabaseStore = {
     return value ? agentRunFrom(value) : null;
   },
 
+  async listActiveAgentRunsForRoom(roomId: string) {
+    const { data, error } = await db()
+      .from("agent_runs")
+      .select("*")
+      .eq("room_id", roomId)
+      .in("status", ["queued", "running", "requires_action", "idle"])
+      .order("started_at", { ascending: false });
+    return rows(assertOk(data, error)).map(agentRunFrom);
+  },
+
+  // queued → running 원자적 전이. 이미 다른 워커가 점유했거나 queued가 아니면 null.
+  async claimAgentRunForExecution(runId: string) {
+    const { data, error } = await db()
+      .from("agent_runs")
+      .update({ status: "running" })
+      .eq("id", runId)
+      .eq("status", "queued")
+      .select("*")
+      .maybeSingle();
+    const value = row(assertOk(data, error));
+    return value ? agentRunFrom(value) : null;
+  },
+
   async addAgentRunEvent(agentRunId: string, eventType: string, payload: Record<string, unknown>) {
     const { data, error } = await db()
       .from("agent_run_events")

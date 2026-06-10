@@ -544,6 +544,20 @@ export const mockStore = {
     return state().agentRuns.find((run) => run.id === runId) ?? null;
   },
 
+  listActiveAgentRunsForRoom(roomId: string) {
+    const activeStatuses = new Set(["queued", "running", "requires_action", "idle"]);
+    return state().agentRuns.filter((run) => run.roomId === roomId && activeStatuses.has(run.status));
+  },
+
+  claimAgentRunForExecution(runId: string) {
+    const run = state().agentRuns.find((item) => item.id === runId);
+    if (!run || run.status !== "queued") {
+      return null;
+    }
+    run.status = "running";
+    return run;
+  },
+
   addAgentRunEvent(agentRunId: string, eventType: string, payload: Record<string, unknown>) {
     const event: AgentRunEvent = {
       id: id(),

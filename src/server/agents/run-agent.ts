@@ -59,6 +59,42 @@ type StartedAgentRun = {
 const activeAgentRunControllers = new Map<string, AbortController>();
 const terminalAgentRunStatuses = new Set<AgentRun["status"]>(["completed", "failed", "cancelled"]);
 
+// 비용 폭주 방지: 방당 동시 활성 run 상한. 좀비 run(아래 타임아웃 초과)은 슬롯에서 제외된다.
+const MAX_ACTIVE_RUNS_PER_ROOM = 3;
+// 이 시간을 넘겨 종결되지 않은 run은 좀비로 간주해 failed 처리한다(어댑터 스트림 타임아웃 55초 + 여유).
+const STUCK_RUN_TIMEOUT_MS = 5 * 60 * 1000;
+
+class AgentRunRateLimitError extends Error {
+  status = 429;
+  constructor() {
+    super("이 방에서 봇이 이미 작업 중입니다. 잠시 후 다시 시도해 주세요.");
+    this.name = "AgentRunRateLimitError";
+  }
+}
+
+// 좀비 run을 청소하고 방당 동시 실행 상한을 강제한다.
+async function enforceRoomRunConcurrency(source: AgentRunSource, roomId: string) {
+  const active = await source.listActiveAgentRunsForRoom(roomId);
+  const now = Date.now();
+  let liveCount = 0;
+  for (const run of active) {
+    const startedAtMs = new Date(run.startedAt).getTime();
+    const isStuck = Number.isFinite(startedAtMs) && now - startedAtMs > STUCK_RUN_TIMEOUT_MS;
+    if (isStuck) {
+      await source.updateAgentRun(run.id, {
+        status: "failed",
+        error: "실행 시간이 초과되어 자동 종료되었습니다.",
+        endedAt: new Date().toISOString(),
+      });
+      continue;
+    }
+    liveCount += 1;
+  }
+  if (liveCount >= MAX_ACTIVE_RUNS_PER_ROOM) {
+    throw new AgentRunRateLimitError();
+  }
+}
+
 class AgentRunCancelledError extends Error {
   constructor() {
     super("봇 실행이 중단되었습니다.");
@@ -97,6 +133,8 @@ export async function startAgentRun(input: RunAgentInput): Promise<StartedAgentR
   } else if (agent.roomId !== input.roomId && !isDevelopmentAgent(agent)) {
     throw new Error("이 방의 상주 봇만 호출할 수 있습니다.");
   }
+
+  await enforceRoomRunConcurrency(source, input.roomId);
 
   const existingInputMessage = input.inputMessageId
     ? await getExistingInputMessage(input.roomId, input.inputMessageId)
@@ -176,14 +214,17 @@ export async function completeAgentRun(job: AgentRunJob) {
     return { run: existingRun, outputMessage: null };
   }
 
+  // queued → running 원자적 점유. 실패 시 다른 워커가 이미 실행 중이거나 종결된 것이므로 중복 실행하지 않는다.
+  const runningRun = await source.claimAgentRunForExecution(job.runId);
+  if (!runningRun) {
+    const current = await getAgentRunById(source, job.runId);
+    return { run: current ?? existingRun, outputMessage: null };
+  }
+
   const controller = new AbortController();
   activeAgentRunControllers.set(job.runId, controller);
 
   try {
-    const runningRun = await source.updateAgentRun(job.runId, { status: "running" });
-    if (!runningRun) {
-      throw new Error("봇 실행을 찾을 수 없습니다.");
-    }
     await recordProgress(source, job.runId, {
       key: "started",
       title: "실행 시작",
