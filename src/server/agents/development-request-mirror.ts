@@ -153,7 +153,8 @@ export async function backfillDevelopmentAgentRequestMirrors(input: {
       continue;
     }
 
-    const beforeMessages = await input.source.listMessages(DEVELOPMENT_AGENT_ROOM_ID);
+    // candidates는 미러가 없는 run만 골라낸 것이므로, 미러 메시지 id가 채워지면 곧 신규 생성이다.
+    // (이전에는 매 candidate마다 development 방 메시지를 before/after 두 번 더 조회해 비교했다.)
     const updatedRun = await mirrorDevelopmentAgentRequest({
       source: input.source,
       agent: {
@@ -168,8 +169,9 @@ export async function backfillDevelopmentAgentRequestMirrors(input: {
       inputMessage,
     });
     if (updatedRun.metadata.developmentRoomMirrorMessageId) {
-      const afterMessages = await input.source.listMessages(DEVELOPMENT_AGENT_ROOM_ID);
-      created += afterMessages.length > beforeMessages.length ? 1 : 0;
+      created += 1;
+    } else {
+      skipped += 1;
     }
   }
 
