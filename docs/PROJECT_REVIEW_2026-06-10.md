@@ -208,14 +208,16 @@
 
 **Phase 1 완료.** 남은 보강(Phase 2/3 또는 후속): listMessages 페이지네이션(Realtime와 함께), Sentry 관측성, maxDuration/큐 이관, Vercel 머지 게이트 연결, P1-2 라이브 로그인 검증.
 
-### Phase 2 — 제품 완성 (2~4주)
-1. **Supabase Realtime 채팅** + 스크롤 정책 + mock 요소 제거 (P0-8, P1-18,20)
-2. 디자인 시스템 정합화 + Pretendard 실제 로드 (P1-19)
-3. Dialog 통합 + 영문 상태값 한글화 + a11y 보강 (P1-17, P3)
-4. DB 생성 타입 도입 + supabase-store 계약 테스트 + E2E 2개 (P1-13,14)
-5. Zod 입력 검증 전면화 + 업로드 제한 (P2-1,3)
-6. 마이그레이션 PII 분리 + seed 체계 + 보존 정책 (P1-3,10)
-7. 라우트→서비스 위임 정리 + HttpError + lib/server 경계 정리 (P2-7,8,9)
+### Phase 2 — 제품 완성 (2~4주) — 🔄 진행 중 (2026-06-10, 커밋 cb7694f·3ed6573·d33c708·68341b7·8bfe6c5)
+1. ✅ 채팅 교차 사용자 수신 + 스크롤 정책 + mock 요소 제거 (P0-8, P1-18,20). **Realtime 대신 폴링(4s, visibility-aware)** 채택 — RLS/publication 라이브 설정 불필요, service-role 메시지 API 재사용, graceful degradation. 스크롤은 하단 근접 시에만 자동 + "새 메시지" 배지. mock presence/onlineCount/가짜 공유카드 제거
+2. ✅ Pretendard 실제 로드 (P1-19) — CDN(dynamic subset) + `--font-sans` 선두 교체. "디자인 시스템 정합화"의 팔레트 부분(warm vs Navy/Gold)은 시각 결정이 필요해 별도
+3. 🔄 부분 — ✅ 영문 상태값 한글화(status-labels) (P3) / ⬜ Dialog 통합(P1-17, 6개 복붙 모달 → 제어형 공유 Dialog) — UI 거동 시각 검증 필요, 별도 / ⬜ a11y 보강
+4. ⬜ DB 생성 타입 + 계약 테스트 + E2E (P1-13,14) — `supabase gen types`·계약 테스트·E2E 실행이 **라이브 Supabase/앱 구동 필요**, 별도 세션
+5. ✅ Zod 입력 검증 (P2-1) — 고위험 6개 라우트(agent-runs·messages·tasks·decisions·meeting-imports·files/share)에 스키마 + 배열 상한(amplification 차단). 나머지 라우트는 점진 확대. 업로드 크기/MIME 제한(P2-3)은 별도
+6. ⬜ 마이그레이션 PII 분리 + seed 체계 + 보존 정책 (P1-3,10) — 이미 적용된 마이그레이션 수정은 위험, forward 마이그레이션/seed 재설계로 신중히
+7. ✅ HttpError 정리(P2-9) / ⬜ 라우트→서비스 위임·lib·server 경계(P2-7,8) — 점진
+
+**Phase 2 잔여(별도 세션 권장):** Dialog 통합(시각 검증), DB 생성 타입·계약 테스트·E2E(라이브 환경), 마이그레이션 PII 분리(forward 마이그레이션), 라우트→서비스 위임 정리.
 
 ### Phase 3 — 스케일 대비 (50방/500유저 전)
 1. 에이전트 실행 큐 기반 워커 이관 (`after()`+인메모리 Map 탈피)
