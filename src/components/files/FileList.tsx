@@ -8,6 +8,7 @@ import { FileDeleteButton } from "@/components/files/FileDeleteButton";
 import { FileDownloadButton } from "@/components/files/FileDownloadButton";
 import { FileUploadForm } from "@/components/files/FileUploadForm";
 import { WarmCard } from "@/components/layout/WarmCard";
+import { dialogOverlayClassName } from "@/components/ui/dialog-styles";
 import { Button } from "@/components/ui/button";
 import { roomTypeLabel } from "@/lib/status-labels";
 import { cn } from "@/lib/utils/cn";
@@ -163,7 +164,7 @@ function FileShareToRoomsDialog({
         </Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
+        <DialogPrimitive.Overlay className={dialogOverlayClassName} />
         <DialogPrimitive.Content
           onOpenAutoFocus={(event) => event.preventDefault()}
           className="motion-context-dialog fixed left-1/2 top-[50dvh] z-50 grid max-h-[min(calc(100dvh-2rem),40rem)] w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 grid-rows-[auto_auto_minmax(0,1fr)_auto_auto] gap-4 overflow-hidden rounded-lg border border-line bg-card p-5 shadow-xl"

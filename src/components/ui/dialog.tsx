@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
+import { dialogOverlayClassName } from "@/components/ui/dialog-styles";
 
 export function Dialog({
   trigger,
@@ -21,7 +22,7 @@ export function Dialog({
     <DialogPrimitive.Root>
       <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
+        <DialogPrimitive.Overlay className={dialogOverlayClassName} />
         <DialogPrimitive.Content
           className={cn(
             "motion-context-dialog fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,34rem)] -translate-x-1/2 -translate-y-1/2 gap-5 rounded-lg border border-line bg-card p-5 shadow-xl",

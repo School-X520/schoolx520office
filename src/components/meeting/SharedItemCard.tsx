@@ -6,6 +6,7 @@ import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ArrowDownToLine, ExternalLink, FolderOpen, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { dialogOverlayClassName } from "@/components/ui/dialog-styles";
 import { TextInput } from "@/components/ui/form-controls";
 import { StatusPill } from "@/components/layout/StatusPill";
 import { roomTypeLabel } from "@/lib/status-labels";
@@ -67,7 +68,7 @@ function DeleteSharedItemButton({ item }: { item: SharedItem }) {
         </Button>
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-black/35" />
+        <AlertDialog.Overlay className={dialogOverlayClassName} />
         <AlertDialog.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 w-[min(92vw,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-card p-5 shadow-lg">
           <AlertDialog.Title className="text-base font-semibold text-balance">공유 항목 삭제</AlertDialog.Title>
           <AlertDialog.Description className="mt-2 text-sm text-pretty text-ink-soft">
@@ -124,7 +125,7 @@ function OpenOriginalDialog({ item }: { item: SharedItem }) {
         </Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
+        <DialogPrimitive.Overlay className={dialogOverlayClassName} />
         <DialogPrimitive.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border border-line bg-card p-5 shadow-xl">
           <div className="space-y-1 pr-10">
             <DialogPrimitive.Title className="text-lg font-semibold text-balance">원본 파일 열기</DialogPrimitive.Title>
@@ -231,7 +232,7 @@ function ImportToRoomsDialog({ item }: { item: SharedItem }) {
         </Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-ink/35" />
+        <DialogPrimitive.Overlay className={dialogOverlayClassName} />
         <DialogPrimitive.Content
           onOpenAutoFocus={(event) => event.preventDefault()}
           className="motion-context-dialog fixed left-1/2 top-[50dvh] z-50 grid max-h-[min(calc(100dvh-2rem),40rem)] w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-4 overflow-hidden rounded-lg border border-line bg-card p-5 shadow-xl"

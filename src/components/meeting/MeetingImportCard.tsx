@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { Bot, ListChecks, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { dialogOverlayClassName } from "@/components/ui/dialog-styles";
 import { StatusPill } from "@/components/layout/StatusPill";
 import { meetingImportStatusLabel } from "@/lib/status-labels";
 import type { MeetingImport } from "@/types/domain";
@@ -108,7 +109,7 @@ function DeleteMeetingImportButton({ item }: { item: MeetingImport }) {
         </Button>
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="motion-context-overlay fixed inset-0 z-40 bg-black/35" />
+        <AlertDialog.Overlay className={dialogOverlayClassName} />
         <AlertDialog.Content className="motion-context-dialog fixed left-1/2 top-1/2 z-50 w-[min(92vw,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-card p-5 shadow-lg">
           <AlertDialog.Title className="text-base font-semibold text-balance">반입 항목 삭제</AlertDialog.Title>
           <AlertDialog.Description className="mt-2 text-sm text-pretty text-ink-soft">

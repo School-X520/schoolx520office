@@ -19,7 +19,20 @@ const DEFAULT_AGENT_MOUNT_FILE_LIMIT = 20;
 const DEFAULT_AGENT_MOUNT_MAX_FILE_BYTES = 25 * 1024 * 1024;
 const DEFAULT_READ_FILE_MAX_CHARS = 16_000;
 const MAX_READ_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_UPLOAD_FILE_BYTES = 50 * 1024 * 1024;
+// 실행 파일 확장자는 멀웨어 배포 벡터이므로 차단한다. (다운로드는 download disposition으로 인라인 실행을 막지만
+// 파일 공유 자체로 멀웨어가 퍼질 수 있다.) 한국 학교 환경의 HWP 등은 MIME이 불안정해 화이트리스트 대신 차단 목록을 쓴다.
+const BLOCKED_UPLOAD_EXTENSIONS = new Set([
+  "exe", "bat", "cmd", "com", "scr", "msi", "dll", "jar", "sh", "bash", "ps1",
+  "vbs", "vbe", "js", "mjs", "cjs", "wsf", "wsh", "hta", "app", "deb", "rpm",
+  "apk", "dmg", "pkg", "bin", "gadget", "cpl",
+]);
 const execFileAsync = promisify(execFile);
+
+function uploadFileExtension(name: string) {
+  const lastDot = name.lastIndexOf(".");
+  return lastDot >= 0 ? name.slice(lastDot + 1).toLowerCase() : "";
+}
 
 export type MountedAgentFile = {
   roomId: string;
@@ -179,6 +192,15 @@ export async function uploadRoomFile(input: {
   agentRunId?: string | null;
 }) {
   await requireRoomMember(input.userId, input.roomId);
+  if (input.sizeBytes > MAX_UPLOAD_FILE_BYTES) {
+    throw statusError(
+      `파일이 너무 큽니다. ${Math.round(MAX_UPLOAD_FILE_BYTES / 1024 / 1024)}MB 이하 파일만 업로드할 수 있습니다.`,
+      413,
+    );
+  }
+  if (BLOCKED_UPLOAD_EXTENSIONS.has(uploadFileExtension(input.originalName))) {
+    throw statusError("보안상 실행 파일은 업로드할 수 없습니다.", 415);
+  }
   const month = new Date().toISOString().slice(0, 7);
   const fileId = crypto.randomUUID();
   const storagePath = `${input.roomId}/${month}/${fileId}-${safeName(input.originalName)}`;
