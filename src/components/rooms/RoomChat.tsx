@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MessageComposer } from "@/components/rooms/MessageComposer";
 import { MessageTimeline } from "@/components/rooms/MessageTimeline";
+import { mergeMessages, mergeServerMessages } from "@/lib/merge-messages";
 import type {
   Agent,
   AgentRun,
@@ -41,6 +42,52 @@ export function RoomChat({
   const [messages, setMessages] = useState(initialMessages);
   const [cancellingAgentRunIds, setCancellingAgentRunIds] = useState<Set<string>>(() => new Set());
   const chatAgents = [residentAgent, ...guestAgents].filter((agent): agent is Agent => Boolean(agent));
+
+  // 다른 참여자(또는 다른 사람이 호출한 봇)의 메시지를 받기 위해 현재 스레드를 주기적으로 폴링한다.
+  // mergeMessages는 추가/갱신만 하므로 진행 중인 낙관적/대기 메시지를 지우지 않는다.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    async function poll() {
+      if (cancelled) {
+        return;
+      }
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        schedule();
+        return;
+      }
+      try {
+        const response = await fetch(
+          `/api/rooms/${roomId}/messages?threadId=${encodeURIComponent(threadId)}`,
+          { cache: "no-store" },
+        );
+        if (response.ok) {
+          const payload = (await response.json()) as { messages?: RoomMessage[] };
+          if (!cancelled && payload.messages) {
+            setMessages((current) => mergeServerMessages(current, payload.messages ?? []));
+          }
+        }
+      } catch {
+        // 일시적 네트워크 오류는 다음 주기에 재시도.
+      }
+      schedule();
+    }
+
+    function schedule() {
+      if (!cancelled) {
+        timer = setTimeout(poll, 4000);
+      }
+    }
+
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [roomId, threadId]);
 
   function addOptimisticMessage(message: RoomMessage) {
     setMessages((current) => mergeMessages(current, [message]));
@@ -296,12 +343,6 @@ function pendingAgentContent(status: AgentRun["status"]) {
     return "작업 정리 중...";
   }
   return "응답 생성 중...";
-}
-
-function mergeMessages(current: RoomMessage[], incoming: RoomMessage[]) {
-  const byId = new Map(current.map((message) => [message.id, message]));
-  incoming.forEach((message) => byId.set(message.id, message));
-  return [...byId.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
 function latestAgentRunActivity(activity: AgentRunActivity[]) {
