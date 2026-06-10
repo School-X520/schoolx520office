@@ -4,12 +4,7 @@ import { requireUser } from "@/server/auth/require-user";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
-
-function statusError(message: string, status: number) {
-  const error = new Error(message) as Error & { status: number };
-  error.status = status;
-  return error;
-}
+import { statusError } from "@/lib/http-error";
 
 export async function GET(request: Request) {
   try {

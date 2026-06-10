@@ -2,6 +2,7 @@ import "server-only";
 
 import { shouldUseMockData } from "@/lib/env";
 import { ForbiddenError } from "@/server/auth/errors";
+import { statusError } from "@/lib/http-error";
 import { getRoomMembership, requireRoomMember } from "@/server/auth/require-room-member";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
@@ -20,12 +21,6 @@ export async function assertCanCreateVideoMeeting(userId: string, roomId: string
 
 const ZOOM_MEETING_NUMBER_PATTERN = /^\d{8,15}$/;
 const joinableMeetingStatuses = new Set(["scheduled", "live"]);
-
-function statusError(message: string, status: number) {
-  const error = new Error(message) as Error & { status: number };
-  error.status = status;
-  return error;
-}
 
 // Zoom SDK 서명은 등록된 회의 + 해당 방 멤버에게만 발급한다.
 // 검증 없이 발급하면 우리 SDK 키로 임의 Zoom 회의에 참가할 수 있는 서명이 무한 발급된다.

@@ -11,6 +11,7 @@ import { getManagedAgentsClientFromEnv, type AnthropicFileMetadata } from "@/lib
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
+import { statusError } from "@/lib/http-error";
 import type { FileRecord } from "@/types/domain";
 
 const WORKSPACE_FILES_BUCKET = "workspace-files";
@@ -776,12 +777,6 @@ async function cleanupUnreferencedFile(fileId: string, file: FileRecord) {
   const storagePaths = new Set([file.storagePath, ...versionRows.map((version) => version.storage_path).filter((path): path is string => Boolean(path))]);
   await admin.storage.from(WORKSPACE_FILES_BUCKET).remove([...storagePaths]);
   await admin.from("files").delete().eq("id", fileId);
-}
-
-function statusError(message: string, status: number) {
-  const error = new Error(message) as Error & { status: number };
-  error.status = status;
-  return error;
 }
 
 function isMountedSourceFile(

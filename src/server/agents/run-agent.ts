@@ -1,6 +1,7 @@
 import "server-only";
 
 import { AnthropicApiError } from "@/lib/anthropic/managed-agents-api";
+import { statusError } from "@/lib/http-error";
 import { AGENT_RUN_PROGRESS_EVENT, agentRunProgressPayload } from "@/server/agents/agent-run-activity";
 import { getAgentAdapter } from "@/server/agents/get-agent-adapter";
 import { finalizeAgentRun } from "@/server/agents/finalize-agent-run";
@@ -385,9 +386,7 @@ export async function cancelAgentRun(input: { userId: string; roomId: string; ru
   const source = getSource();
   const run = await getAgentRunById(source, input.runId);
   if (!run || run.roomId !== input.roomId) {
-    const error = new Error("봇 실행을 찾을 수 없습니다.") as Error & { status: number };
-    error.status = 404;
-    throw error;
+    throw statusError("봇 실행을 찾을 수 없습니다.", 404);
   }
   if (terminalAgentRunStatuses.has(run.status)) {
     return { run, cancelled: false };

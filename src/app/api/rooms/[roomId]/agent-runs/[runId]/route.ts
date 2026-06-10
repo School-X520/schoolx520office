@@ -1,4 +1,5 @@
 import { jsonError, jsonOk } from "@/lib/api";
+import { statusError } from "@/lib/http-error";
 import { shouldUseMockData } from "@/lib/env";
 import { publicAgentRunActivity } from "@/server/agents/agent-run-activity";
 import { cancelAgentRun } from "@/server/agents/run-agent";
@@ -18,9 +19,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ roomId: st
     const run = candidate && candidate.roomId === roomId ? candidate : null;
 
     if (!run) {
-      const error = new Error("봇 실행을 찾을 수 없습니다.") as Error & { status: number };
-      error.status = 404;
-      throw error;
+      throw statusError("봇 실행을 찾을 수 없습니다.", 404);
     }
 
     const outputMessage = run.outputMessageId

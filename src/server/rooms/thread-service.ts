@@ -1,6 +1,7 @@
 import "server-only";
 
 import { shouldUseMockData } from "@/lib/env";
+import { statusError } from "@/lib/http-error";
 import { requireRoomMember } from "@/server/auth/require-room-member";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
@@ -27,9 +28,7 @@ export async function resolveRoomThread(userId: string, roomId: string, threadId
     if (thread?.roomId === roomId) {
       return thread;
     }
-    const error = new Error("대화 스레드를 찾을 수 없습니다.") as Error & { status: number };
-    error.status = 404;
-    throw error;
+    throw statusError("대화 스레드를 찾을 수 없습니다.", 404);
   }
 
   const threads = await source.listThreads(roomId);
@@ -47,9 +46,7 @@ export async function createRoomThread(userId: string, roomId: string, title?: s
     source.listTasks(roomId),
   ]);
   if (!room) {
-    const error = new Error("방을 찾을 수 없습니다.") as Error & { status: number };
-    error.status = 404;
-    throw error;
+    throw statusError("방을 찾을 수 없습니다.", 404);
   }
 
   const previousThread = threads.find((thread) => thread.status === "active") ?? threads[0] ?? null;
@@ -94,9 +91,7 @@ export async function updateRoomThread(
   const source = getSource();
   const thread = await source.getThread(threadId);
   if (thread?.roomId !== roomId) {
-    const error = new Error("대화 스레드를 찾을 수 없습니다.") as Error & { status: number };
-    error.status = 404;
-    throw error;
+    throw statusError("대화 스레드를 찾을 수 없습니다.", 404);
   }
 
   const updated = await source.updateThread(threadId, {

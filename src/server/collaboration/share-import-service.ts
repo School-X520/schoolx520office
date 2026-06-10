@@ -6,6 +6,7 @@ import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { copyRoomFileToRoom, downloadRoomFileToLocalAndOpen } from "@/server/files/file-service";
+import { statusError } from "@/lib/http-error";
 import type { JsonObject, MeetingImport } from "@/types/domain";
 
 type DbError = { message: string };
@@ -17,12 +18,6 @@ type LooseDb = {
     ) => PromiseLike<{ data: unknown; error: DbError | null }>;
   };
 };
-
-function statusError(message: string, status: number) {
-  const error = new Error(message) as Error & { status: number };
-  error.status = status;
-  return error;
-}
 
 function textValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -145,9 +140,7 @@ export async function shareMessageToMeeting(input: {
     ? (await source.listFiles(input.sourceRoomId)).find((file) => file.id === input.sourceFileId)
     : null;
   if (input.sourceFileId && !sharedFile) {
-    const error = new Error("공유할 파일을 찾을 수 없습니다.") as Error & { status: number };
-    error.status = 404;
-    throw error;
+    throw statusError("공유할 파일을 찾을 수 없습니다.", 404);
   }
 
   const item = await source.createSharedItem({

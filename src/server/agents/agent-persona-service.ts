@@ -2,6 +2,7 @@ import "server-only";
 
 import { shouldUseMockData } from "@/lib/env";
 import { AnthropicApiError, getManagedAgentsClientFromEnv } from "@/lib/anthropic/managed-agents-api";
+import { statusError } from "@/lib/http-error";
 import { getManagedAgentToolConfigs } from "@/server/agents/tools/tool-registry";
 import { requireRoomAdmin, requireRoomMember } from "@/server/auth/require-room-member";
 import { mockStore } from "@/server/data/mock-store";
@@ -19,9 +20,7 @@ export async function getRoomAgentPersona(userId: string, roomId: string) {
   const source = getSource();
   const agent = await source.getAgentByRoom(roomId);
   if (!agent) {
-    const error = new Error("이 방에 연결된 봇이 없습니다.") as Error & { status: number };
-    error.status = 404;
-    throw error;
+    throw statusError("이 방에 연결된 봇이 없습니다.", 404);
   }
   return {
     agent,
@@ -35,9 +34,7 @@ export async function saveRoomAgentPersonaDraft(userId: string, roomId: string, 
   const source = getSource();
   const agent = await source.getAgentByRoom(roomId);
   if (!agent) {
-    const error = new Error("이 방에 연결된 봇이 없습니다.") as Error & { status: number };
-    error.status = 404;
-    throw error;
+    throw statusError("이 방에 연결된 봇이 없습니다.", 404);
   }
 
   const persona = normalizeAgentPersona(rawPersona, defaultAgentPersona(agent));
@@ -63,9 +60,7 @@ export async function publishRoomAgentPersona(userId: string, roomId: string, ra
   const source = getSource();
   const agent = await source.getAgentByRoom(roomId);
   if (!agent) {
-    const error = new Error("이 방에 연결된 봇이 없습니다.") as Error & { status: number };
-    error.status = 404;
-    throw error;
+    throw statusError("이 방에 연결된 봇이 없습니다.", 404);
   }
 
   const persona = normalizeAgentPersona(rawPersona ?? agent.personaDraft, defaultAgentPersona(agent));

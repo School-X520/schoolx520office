@@ -1,4 +1,5 @@
 import { jsonError, jsonOk } from "@/lib/api";
+import { statusError } from "@/lib/http-error";
 import { personaPublishErrorMessage, publishRoomAgentPersona } from "@/server/agents/agent-persona-service";
 import { requireUser } from "@/server/auth/require-user";
 
@@ -11,8 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ roo
     return jsonOk(result);
   } catch (error) {
     const message = personaPublishErrorMessage(error);
-    const wrapped = new Error(message) as Error & { status?: number };
-    wrapped.status = error instanceof Error && "status" in error && typeof error.status === "number" ? error.status : 500;
-    return jsonError(wrapped);
+    const status = error instanceof Error && "status" in error && typeof error.status === "number" ? error.status : 500;
+    return jsonError(statusError(message, status));
   }
 }

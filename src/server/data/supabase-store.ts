@@ -3,6 +3,7 @@ import "server-only";
 import { COORDINATOR_AGENT_ID, getCoordinatorAgent } from "@/lib/agents/development-agent";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { decryptSecret, encryptSecret } from "@/server/integrations/token-crypto";
+import { statusError } from "@/lib/http-error";
 import type {
   Agent,
   AgentPersona,
@@ -1241,9 +1242,7 @@ export const supabaseStore = {
       .select("*")
       .single();
     if (isThreadSchemaMissing(error)) {
-      const migrationError = new Error("room_threads migration이 아직 적용되지 않았습니다.") as Error & { status: number };
-      migrationError.status = 503;
-      throw migrationError;
+      throw statusError("room_threads migration이 아직 적용되지 않았습니다.", 503);
     }
     return threadFrom(row(assertOk(data, error))!);
   },

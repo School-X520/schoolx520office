@@ -4,13 +4,8 @@ import { requireUser } from "@/server/auth/require-user";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
+import { statusError } from "@/lib/http-error";
 import type { Task } from "@/types/domain";
-
-function statusError(message: string, status: number) {
-  const error = new Error(message) as Error & { status: number };
-  error.status = status;
-  return error;
-}
 
 function taskVisibleInRooms(task: Task, roomIds: Set<string>) {
   return roomIds.has(task.roomId) || (task.assigneeRoomId ? roomIds.has(task.assigneeRoomId) : false);
