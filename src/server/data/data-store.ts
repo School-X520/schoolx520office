@@ -28,3 +28,28 @@ export type DataStore = {
 export function getDataStore(): DataStore {
   return shouldUseMockData() ? mockStore : supabaseStore;
 }
+
+// ── 양방향 계약 가드 ──────────────────────────────────────────────
+// DataStore는 supabaseStore를 진실원으로 삼아 "supabase에 있는 메서드는 mock도 구현"을 강제한다.
+// 반대 방향(mock에만 추가된 메서드)은 기본적으로 잡히지 않아, getDataStore()로는 호출할 수 없는
+// "mock 전용" 메서드가 조용히 늘어날 수 있다(supabase 모드에서 'is not a function' 위험).
+// 아래 가드는 의도적으로 mock에만 두는 메서드를 명시적 허용 목록으로 고정하고,
+// 그 외에 mock에만 추가된 메서드가 생기면 컴파일을 실패시킨다.
+//
+// 허용 목록(프로덕션 supabaseStore에는 없음):
+// - currentUser / grantFileAccess / removeFileFromRoom: 호출부가 shouldUseMockData()로 직접 분기한다.
+// - listVideoEvents: 현재 테스트 전용. 프로덕션에서 video_events 조회가 필요해지면 supabaseStore에도 추가할 것.
+type IntentionalMockOnlyMethods =
+  | "currentUser"
+  | "grantFileAccess"
+  | "removeFileFromRoom"
+  | "listVideoEvents";
+
+type UnexpectedMockOnlyMethods = Exclude<
+  keyof typeof mockStore,
+  keyof DataStore | DivergentMethods | IntentionalMockOnlyMethods
+>;
+
+// UnexpectedMockOnlyMethods가 never가 아니면(=허용되지 않은 mock 전용 메서드 발생) 타입이 false가 되어 컴파일 실패한다.
+const _assertStoreSurfaceParity: UnexpectedMockOnlyMethods extends never ? true : false = true;
+void _assertStoreSurfaceParity;
