@@ -8,6 +8,25 @@ import { agentFileMountPath, readRoomFileForAgent } from "@/server/files/file-se
 import { hasAllRoomSearchAccess } from "@/lib/agents/development-agent";
 import type { AgentRun, RoomMessage } from "@/types/domain";
 
+// 감사 로그에 도구 input 원문을 통째로 남기면 학생/교사 PII가 평문으로 무한 적재되고 테이블이 비대해진다.
+// 키 목록 + 짧은 미리보기로 제한해 "무엇을 어떤 파라미터로 호출했는지"의 추적 가치는 유지하되 분량을 묶는다.
+const AUDIT_INPUT_PREVIEW_MAX = 500;
+
+function auditableToolInput(input: Record<string, unknown>) {
+  let preview: string;
+  try {
+    preview = JSON.stringify(input);
+  } catch {
+    preview = String(input);
+  }
+  const truncated = preview.length > AUDIT_INPUT_PREVIEW_MAX;
+  return {
+    inputKeys: Object.keys(input),
+    inputPreview: truncated ? `${preview.slice(0, AUDIT_INPUT_PREVIEW_MAX)}…` : preview,
+    inputTruncated: truncated,
+  };
+}
+
 export async function executeTool(agentRunId: string, toolName: string, input: Record<string, unknown>) {
   const source = getDataStore();
   const run = await source.getAgentRunById(agentRunId);
@@ -25,7 +44,7 @@ export async function executeTool(agentRunId: string, toolName: string, input: R
       action: "agent.tool.called",
       targetType: "agent_tool_call",
       targetId: agentRunId,
-      metadata: { toolName, input, risk: definition.risk, writes: definition.writes },
+      metadata: { toolName, ...auditableToolInput(input), risk: definition.risk, writes: definition.writes },
     });
 
     const data = await runTool(run, toolName, input);
