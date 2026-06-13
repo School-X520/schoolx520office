@@ -208,7 +208,7 @@
 - ✅ **P1-B** — `summarizeVideoMeeting` writer 게이트(observer 차단) + non-null 단언 제거. 테스트 추가.
 - ✅ **P1-C** — `importAnthropicSessionFiles`/`saveAgentGeneratedTextFile`에 `requireRoomMember` 다층방어.
 - ✅ **P1-G** — `requires_action`(미완) run을 finalize하지 않도록 가드(불완전 출력의 메모리 승격·재주입 차단).
-- ✅ **P1-H** — `sweepStuckAgentRuns()` 전역 백스톱 + `/api/agent-runs/sweep`(CRON_SECRET 보호) + `vercel.json` 시간별 cron. 테스트 추가.
+- ✅ **P1-H** — `sweepStuckAgentRuns()` 전역 백스톱 + `/api/agent-runs/sweep`(CRON_SECRET 보호) + `vercel.json` 일별 cron(Hobby 플랜은 sub-daily cron 배포 거부 → 일별로 설정, 활성 방은 lazy sweep이 커버). 테스트 추가.
 - ✅ **P1-I** — `DataStore` 양방향 계약 컴파일 가드(mock 전용 메서드 드리프트 차단, 드리프트 시 컴파일 실패 확인).
 - ✅ **P1-E** — `executeTool` 감사로그의 도구 input을 키 목록 + 500자 미리보기로 제한(평문 PII 무한 적재 차단).
 - ✅ **문서 정합화** — DEPLOYMENT(mock-mode 충돌·RLS 휴면 명시)/SETUP(APP_SESSION_SECRET·INTEGRATION_TOKENS_ENC_KEY)/supabase README(마이그레이션 전체 적용·Storage private)/HANDOFF(마이그레이션 목록)·.env.example(CRON_SECRET).
