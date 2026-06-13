@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mockUser } from "@/lib/mock-data";
 import { isActiveVideoMeeting, VIDEO_MEETING_ACTIVE_WINDOW_HOURS } from "@/lib/video-meetings/active";
-import { createVideoMeeting, joinVideoMeeting, registerVideoMeetingJoinUrl } from "@/lib/video-meetings/service";
+import {
+  createVideoMeeting,
+  joinVideoMeeting,
+  registerVideoMeetingJoinUrl,
+  summarizeVideoMeeting,
+} from "@/lib/video-meetings/service";
 import { mockStore } from "@/server/data/mock-store";
 
 function closeOpenMeetingRows(roomId: string) {
@@ -235,5 +240,22 @@ describe("video meeting service", () => {
         nowMs,
       ),
     ).toBe(false);
+  });
+
+  it("observer는 AI 회의 요약(비용 유발 실행)을 트리거할 수 없다", async () => {
+    closeOpenMeetingRows("meeting");
+    const meeting = await createVideoMeeting(mockUser.userId, {
+      roomId: "meeting",
+      provider: "google_meet",
+      title: "요약 권한 테스트",
+      consentRecording: false,
+      consentTranscript: false,
+      consentAiSummary: true,
+    });
+
+    const observerUserId = "iso-observer-user";
+    mockStore.upsertMembership({ userId: observerUserId, roomId: "meeting", role: "observer" });
+
+    await expect(summarizeVideoMeeting(observerUserId, meeting.id)).rejects.toMatchObject({ status: 403 });
   });
 });

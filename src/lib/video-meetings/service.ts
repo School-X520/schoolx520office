@@ -11,6 +11,7 @@ import {
   assertCanCreateVideoMeeting,
   assertCanEndVideoMeeting,
   assertRoomMember,
+  assertRoomWriter,
   sanitizeVideoMeetingResponse,
 } from "@/lib/video-meetings/permissions";
 import { runAgent } from "@/server/agents/run-agent";
@@ -294,8 +295,12 @@ export async function summarizeVideoMeeting(userId: string, meetingId: string) {
   if (!meeting) {
     throw new Error("회의를 찾을 수 없습니다.");
   }
-  await assertRoomMember(userId, meeting.roomId);
-  const agent = (await source.getAgentByRoom("development"))!;
+  // AI 요약은 비용을 유발하는 에이전트 실행 + 산출물 쓰기이므로 observer는 트리거할 수 없다.
+  await assertRoomWriter(userId, meeting.roomId);
+  const agent = await source.getAgentByRoom("development");
+  if (!agent) {
+    throw new Error("회의 요약 봇을 사용할 수 없습니다.");
+  }
   const result = await runAgent({
     userId,
     roomId: meeting.roomId,

@@ -339,6 +339,9 @@ export async function importAnthropicSessionFiles(input: {
     mountPath?: string | null;
   }>;
 }) {
+  // 방어적 재검증: 에이전트 실행(이미 인가된 run)에서 호출되지만 방에 파일을 기록하는
+  // write이므로 호출자의 방 멤버십을 한 번 더 확인한다(다층방어).
+  await requireRoomMember(input.userId, input.roomId);
   if (shouldUseMockData()) {
     return [];
   }
@@ -411,6 +414,8 @@ export async function saveAgentGeneratedTextFile(input: {
   mimeType?: string;
   source?: Record<string, unknown>;
 }) {
+  // 방어적 재검증(다층방어): 방에 파일을 기록하기 전에 호출자의 방 멤버십을 확인한다.
+  await requireRoomMember(input.userId, input.roomId);
   if (shouldUseMockData()) {
     return mockStore.addFile({
       storagePath: agentGeneratedStoragePath(input.roomId, input.agentRunId, input.originalName),

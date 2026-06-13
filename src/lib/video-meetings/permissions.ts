@@ -3,12 +3,22 @@ import "server-only";
 import { shouldUseMockData } from "@/lib/env";
 import { ForbiddenError } from "@/server/auth/errors";
 import { statusError } from "@/lib/http-error";
-import { getRoomMembership, requireRoomMember } from "@/server/auth/require-room-member";
+import { canWriteRoom, getRoomMembership, requireRoomMember } from "@/server/auth/require-room-member";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 
 export async function assertRoomMember(userId: string, roomId: string) {
   return requireRoomMember(userId, roomId);
+}
+
+// 쓰기 권한(member/admin)을 요구한다. observer는 비용을 유발하는 작업(예: AI 요약 실행)을
+// 트리거할 수 없어야 한다.
+export async function assertRoomWriter(userId: string, roomId: string) {
+  const membership = await requireRoomMember(userId, roomId);
+  if (!canWriteRoom(membership.role)) {
+    throw new ForbiddenError("이 작업을 수행할 권한이 없습니다.");
+  }
+  return membership;
 }
 
 export async function assertCanCreateVideoMeeting(userId: string, roomId: string) {
