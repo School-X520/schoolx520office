@@ -1,12 +1,8 @@
 import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
 import { parseJsonBody } from "@/lib/parse-json-body";
-import { shouldUseMockData } from "@/lib/env";
-import { importMeetingMessageToRoom } from "@/server/collaboration/share-import-service";
-import { requireRoomMember } from "@/server/auth/require-room-member";
+import { importMeetingMessageToRoom, listVisibleMeetingImports } from "@/server/collaboration/share-import-service";
 import { requireUser } from "@/server/auth/require-user";
-import { mockStore } from "@/server/data/mock-store";
-import { supabaseStore } from "@/server/data/supabase-store";
 
 const importBodySchema = z.object({
   targetRoomId: z.string().max(64).optional(),
@@ -21,11 +17,8 @@ export async function GET(request: Request) {
   try {
     const user = await requireUser();
     const roomId = new URL(request.url).searchParams.get("roomId") ?? undefined;
-    if (roomId) {
-      await requireRoomMember(user.userId, roomId);
-    }
-    const source = shouldUseMockData() ? mockStore : supabaseStore;
-    return jsonOk({ imports: await source.listImports(roomId) });
+    const imports = await listVisibleMeetingImports({ userId: user.userId, roomId });
+    return jsonOk({ imports });
   } catch (error) {
     return jsonError(error);
   }

@@ -4,7 +4,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { shouldUseMockData } from "@/lib/env";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
-import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
+import { canWriteRoom, getUserRoomIds, requireRoomMember } from "@/server/auth/require-room-member";
 import { copyRoomFileToRoom, downloadRoomFileToLocalAndOpen } from "@/server/files/file-service";
 import { statusError } from "@/lib/http-error";
 import type { JsonObject, MeetingImport } from "@/types/domain";
@@ -122,6 +122,35 @@ async function markImportPendingContextProcessed(input: { roomId: string; meetin
     await source.markPendingProcessed(input.roomId, contextIds);
   }
   return contextIds;
+}
+
+// 공유 항목 목록 조회 — roomId가 지정되면 그 방 멤버십을 강제하고,
+// 미지정이면 호출자가 멤버인 방(source/target)으로만 결과를 제한한다.
+// roomId 미지정 시 무필터 전역 조회를 막아 테넌트 격리를 보장한다.
+export async function listVisibleSharedItems(input: { userId: string; roomId?: string }) {
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  if (input.roomId) {
+    await requireRoomMember(input.userId, input.roomId);
+    return source.listSharedItems(input.roomId);
+  }
+  const roomIds = await getUserRoomIds(input.userId);
+  return (await source.listSharedItems()).filter(
+    (item) => roomIds.has(item.sourceRoomId) || roomIds.has(item.targetRoomId),
+  );
+}
+
+// 회의방 반입 항목 목록 조회 — listVisibleSharedItems와 동일한 격리 규칙.
+// 미지정 시 호출자가 멤버인 방(target/meeting)으로만 제한한다.
+export async function listVisibleMeetingImports(input: { userId: string; roomId?: string }) {
+  const source = shouldUseMockData() ? mockStore : supabaseStore;
+  if (input.roomId) {
+    await requireRoomMember(input.userId, input.roomId);
+    return source.listImports(input.roomId);
+  }
+  const roomIds = await getUserRoomIds(input.userId);
+  return (await source.listImports()).filter(
+    (item) => roomIds.has(item.targetRoomId) || roomIds.has(item.meetingRoomId),
+  );
 }
 
 export async function shareMessageToMeeting(input: {

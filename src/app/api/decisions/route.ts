@@ -13,15 +13,12 @@ const decisionBodySchema = z.object({
   description: z.string().max(4000).optional(),
 });
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const user = await requireUser();
-    const roomId = new URL(request.url).searchParams.get("roomId") ?? undefined;
-    if (roomId) {
-      await requireRoomMember(user.userId, roomId);
-    } else {
-      await requireRoomMember(user.userId, "meeting");
-    }
+    // 결정사항은 항상 메인 회의방('meeting') 스코프다. 인가 대상과 데이터 대상을
+    // 일치시키기 위해 임의 roomId 분기를 두지 않고 meeting 멤버십만 강제한다.
+    await requireRoomMember(user.userId, "meeting");
     const source = shouldUseMockData() ? mockStore : supabaseStore;
     return jsonOk({ decisions: await source.listDecisions("meeting") });
   } catch (error) {

@@ -1,12 +1,8 @@
 import { z } from "zod";
 import { jsonError, jsonOk } from "@/lib/api";
 import { parseJsonBody } from "@/lib/parse-json-body";
-import { shouldUseMockData } from "@/lib/env";
-import { shareMessageToMeeting } from "@/server/collaboration/share-import-service";
-import { requireRoomMember } from "@/server/auth/require-room-member";
+import { listVisibleSharedItems, shareMessageToMeeting } from "@/server/collaboration/share-import-service";
 import { requireUser } from "@/server/auth/require-user";
-import { mockStore } from "@/server/data/mock-store";
-import { supabaseStore } from "@/server/data/supabase-store";
 
 const sharedItemBodySchema = z.object({
   sourceRoomId: z.string().max(64).optional(),
@@ -20,11 +16,8 @@ export async function GET(request: Request) {
   try {
     const user = await requireUser();
     const roomId = new URL(request.url).searchParams.get("roomId") ?? undefined;
-    if (roomId) {
-      await requireRoomMember(user.userId, roomId);
-    }
-    const source = shouldUseMockData() ? mockStore : supabaseStore;
-    return jsonOk({ sharedItems: await source.listSharedItems(roomId) });
+    const sharedItems = await listVisibleSharedItems({ userId: user.userId, roomId });
+    return jsonOk({ sharedItems });
   } catch (error) {
     return jsonError(error);
   }

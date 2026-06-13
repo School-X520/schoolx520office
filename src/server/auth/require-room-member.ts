@@ -3,6 +3,7 @@ import "server-only";
 import { shouldUseMockData } from "@/lib/env";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { mockStore } from "@/server/data/mock-store";
+import { supabaseStore } from "@/server/data/supabase-store";
 import { ForbiddenError } from "@/server/auth/errors";
 import type { RoomRole } from "@/types/domain";
 
@@ -61,4 +62,20 @@ export async function requireRoomAdmin(userId: string, roomId: string) {
 
 export function canWriteRoom(role?: RoomRole | null) {
   return role === "admin" || role === "member";
+}
+
+// 호출자가 속한 방의 멤버십 목록을 mock/supabase 양 모드에서 동일하게 반환한다.
+// (mockStore.listMemberships는 인자가 없어 전체를 반환하므로 user로 필터링한다.)
+export async function listUserMemberships(userId: string) {
+  if (shouldUseMockData()) {
+    return mockStore.listMemberships().filter((membership) => membership.userId === userId);
+  }
+  return supabaseStore.listMemberships(userId);
+}
+
+// 호출자가 멤버인 방 id 집합. roomId가 지정되지 않은 목록 조회에서
+// "내가 속한 방의 항목만" 필터링하는 데 쓴다(테넌트 격리).
+export async function getUserRoomIds(userId: string): Promise<Set<string>> {
+  const memberships = await listUserMemberships(userId);
+  return new Set(memberships.map((membership) => membership.roomId));
 }

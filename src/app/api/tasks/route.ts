@@ -3,7 +3,7 @@ import { jsonError, jsonOk } from "@/lib/api";
 import { parseJsonBody } from "@/lib/parse-json-body";
 import { shouldUseMockData } from "@/lib/env";
 import { requireUser } from "@/server/auth/require-user";
-import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
+import { canWriteRoom, getUserRoomIds, requireRoomMember } from "@/server/auth/require-room-member";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { statusError } from "@/lib/http-error";
@@ -32,10 +32,7 @@ export async function GET(request: Request) {
     if (roomId) {
       return jsonOk({ tasks: await source.listTasks(roomId) });
     }
-    const memberships = shouldUseMockData()
-      ? mockStore.listMemberships().filter((membership) => membership.userId === user.userId)
-      : await supabaseStore.listMemberships(user.userId);
-    const roomIds = new Set(memberships.map((membership) => membership.roomId));
+    const roomIds = await getUserRoomIds(user.userId);
     return jsonOk({ tasks: (await source.listTasks()).filter((task) => taskVisibleInRooms(task, roomIds)) });
   } catch (error) {
     return jsonError(error);
