@@ -71,20 +71,29 @@ class AgentRunRateLimitError extends Error {
   }
 }
 
+const STUCK_RUN_ERROR = "실행 시간이 초과되어 자동 종료되었습니다.";
+
+function isRunStuck(run: { startedAt: string }, nowMs: number) {
+  const startedAtMs = new Date(run.startedAt).getTime();
+  return Number.isFinite(startedAtMs) && nowMs - startedAtMs > STUCK_RUN_TIMEOUT_MS;
+}
+
+async function failStuckRun(source: AgentRunSource, runId: string) {
+  await source.updateAgentRun(runId, {
+    status: "failed",
+    error: STUCK_RUN_ERROR,
+    endedAt: new Date().toISOString(),
+  });
+}
+
 // 좀비 run을 청소하고 방당 동시 실행 상한을 강제한다.
 async function enforceRoomRunConcurrency(source: AgentRunSource, roomId: string) {
   const active = await source.listActiveAgentRunsForRoom(roomId);
-  const now = Date.now();
+  const nowMs = Date.now();
   let liveCount = 0;
   for (const run of active) {
-    const startedAtMs = new Date(run.startedAt).getTime();
-    const isStuck = Number.isFinite(startedAtMs) && now - startedAtMs > STUCK_RUN_TIMEOUT_MS;
-    if (isStuck) {
-      await source.updateAgentRun(run.id, {
-        status: "failed",
-        error: "실행 시간이 초과되어 자동 종료되었습니다.",
-        endedAt: new Date().toISOString(),
-      });
+    if (isRunStuck(run, nowMs)) {
+      await failStuckRun(source, run.id);
       continue;
     }
     liveCount += 1;
@@ -92,6 +101,26 @@ async function enforceRoomRunConcurrency(source: AgentRunSource, roomId: string)
   if (liveCount >= MAX_ACTIVE_RUNS_PER_ROOM) {
     throw new AgentRunRateLimitError();
   }
+}
+
+// 트래픽이 없는 방의 좀비 run까지 정리하는 전역 백스톱(cron에서 주기적으로 호출).
+// 방당 lazy 스윕(enforceRoomRunConcurrency)은 새 run 시도가 있어야 동작하므로,
+// 유휴 방에서 after() 완료 콜백이 유실되면 run이 영구히 active로 남는다. 이를 보완한다.
+export async function sweepStuckAgentRuns() {
+  const source = getSource();
+  const runs = await source.listAgentRuns();
+  const nowMs = Date.now();
+  let swept = 0;
+  for (const run of runs) {
+    if (terminalAgentRunStatuses.has(run.status)) {
+      continue;
+    }
+    if (isRunStuck(run, nowMs)) {
+      await failStuckRun(source, run.id);
+      swept += 1;
+    }
+  }
+  return { scanned: runs.length, swept };
 }
 
 class AgentRunCancelledError extends Error {
@@ -342,7 +371,12 @@ export async function completeAgentRun(job: AgentRunJob) {
       targetId: job.runId,
     });
 
-    await finalizeAgentRun(job.runId);
+    // requires_action 상태는 추가 도구 결과를 기다리는 미완 run이다. 이 시점에 finalize하면
+    // 불완전한 출력이 방/스레드 요약(도메인 메모리)으로 영구 승격되어 이후 모든 run에 재주입된다.
+    // 실제로 완료된 run만 finalize한다.
+    if (!result.requiresAction) {
+      await finalizeAgentRun(job.runId);
+    }
     return { run: completedRun, outputMessage };
   } catch (error) {
     if (await wasAgentRunCancelled(source, job.runId, controller.signal, error)) {
