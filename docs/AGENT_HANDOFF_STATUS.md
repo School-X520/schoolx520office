@@ -120,14 +120,9 @@ Supabase project ref:
 (redacted — Supabase 대시보드에서 확인)
 ```
 
-Applied migrations:
-
-- `0001_initial_schema.sql`
-- `0002_rls_policies.sql`
-- `0003_seed_base_data.sql`
-- `0004_video_meetings.sql`
-- `0005_auth_onboarding.sql`
-- `0006_admin_room_memberships.sql`
+Applied migrations: `supabase/migrations/`의 전체 목록을 단일 진실원으로 삼는다(아래 나열은
+시점 기록이라 낡기 쉬움 — 배포 시 항상 디렉터리의 최신까지 순서대로 적용). 작성 시점 기준 `0001`~`0006`까지
+적용 확인했으나, 이후 `0007`~`0018`이 추가되었으므로 실제 적용 상태는 Supabase 대시보드에서 확인할 것.
 
 Created Storage bucket:
 

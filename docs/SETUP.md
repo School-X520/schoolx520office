@@ -10,6 +10,10 @@ SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
 ANTHROPIC_BETA_HEADER=managed-agents-2026-04-01
 APP_URL=http://localhost:3000
+# 세션 쿠키 HMAC 서명용 독립 시크릿. 프로덕션 부팅 시 필수(미설정이면 throw). `openssl rand -base64 32`.
+APP_SESSION_SECRET=
+# OAuth refresh/access 토큰 봉투 암호화 키. `openssl rand -base64 32`.
+INTEGRATION_TOKENS_ENC_KEY=
 GOOGLE_MEET_ENABLED=false
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=

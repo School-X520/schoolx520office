@@ -196,3 +196,31 @@
 ---
 
 *본 보고서는 140건 확정 발견(차원 간 중복 포함)을 테마 단위로 병합한 것이다. critical/major는 오케스트레이터가 해당 라우트·스토어 파일을 직접 정독해 재현 경로까지 교차검증했다. 원시 발견 데이터가 필요하면 워크플로 저널(`subagents/workflows/wf_0a45c998-743/`)에서 추출 가능.*
+
+---
+
+## 부록 C. 적용 현황 (2026-06-13, 브랜치 `code-review-2026-06-13`)
+
+검증 환경 한도: typecheck/lint/test로 검증 가능한 변경만 이 세션에서 적용했다. `pnpm build`는 이 머신의 Turbopack/PostCSS 서브프로세스 패닉(미적용 main에서도 동일 재현 — 환경 이슈)으로 실행 불가했고, 타입체크가 전 변경을 커버한다. 라이브 Supabase/구동 앱이 있어야 안전하게 검증되는 항목은 의도적으로 **별도 세션으로 분리**했다(이전 팀의 결정과 동일).
+
+**적용 완료 (커밋됨, typecheck 0 · lint 0 · test 통과):**
+- ✅ **P0-1/P0-2 + P1-A** — `shared-items`/`meeting-imports`/`decisions` GET 인가 격리. `getUserRoomIds` 헬퍼 + `listVisible*` 서비스 함수(route→service)로 통일. roomId 미지정 시 멤버 방으로 제한, decisions는 항상 meeting 멤버십. **회귀 테스트 9건(수정 전 실패 확인).**
+- ✅ **P1-B** — `summarizeVideoMeeting` writer 게이트(observer 차단) + non-null 단언 제거. 테스트 추가.
+- ✅ **P1-C** — `importAnthropicSessionFiles`/`saveAgentGeneratedTextFile`에 `requireRoomMember` 다층방어.
+- ✅ **P1-G** — `requires_action`(미완) run을 finalize하지 않도록 가드(불완전 출력의 메모리 승격·재주입 차단).
+- ✅ **P1-H** — `sweepStuckAgentRuns()` 전역 백스톱 + `/api/agent-runs/sweep`(CRON_SECRET 보호) + `vercel.json` 시간별 cron. 테스트 추가.
+- ✅ **P1-I** — `DataStore` 양방향 계약 컴파일 가드(mock 전용 메서드 드리프트 차단, 드리프트 시 컴파일 실패 확인).
+- ✅ **P1-E** — `executeTool` 감사로그의 도구 input을 키 목록 + 500자 미리보기로 제한(평문 PII 무한 적재 차단).
+- ✅ **문서 정합화** — DEPLOYMENT(mock-mode 충돌·RLS 휴면 명시)/SETUP(APP_SESSION_SECRET·INTEGRATION_TOKENS_ENC_KEY)/supabase README(마이그레이션 전체 적용·Storage private)/HANDOFF(마이그레이션 목록)·.env.example(CRON_SECRET).
+
+**의도적 보류 (변경 안 함 — 근거 명시):**
+- **P1-D**(공유/반입 삭제 권한): source/target **둘 다** write 요구로 바꾸면 target 방 멤버의 정당한 dismiss가 막힌다. 현재 "연결된 두 방 중 한쪽 writer" 정책은 방어 가능 — 변경 안 함.
+- **P1-F**(finalize 220자 요약): 에이전트 자신의 출력 발췌이며 이미 메시지로 영속화됨. PII 검출기 없이 깔끔한 마스킹 불가 — 보류.
+- **requires_action 재개 워커**: 기능 추가(도구 승인 후 Anthropic 세션 재개)라 리뷰 수정 범위 밖. finalize 가드 + 스윕으로 안전한 부분만 처리.
+
+**라이브 Supabase 세션으로 분리 (#7 쿼리 계층 + #8 마이그레이션):**
+- **P1-L/M/N** — `getRoomView` 전역 멤버십/프로필 풀스캔 스코핑, `getOperationStatus` count 집계, `listMessages` keyset 페이지네이션, 폴링 증분 조회, `router.refresh()` 타겟팅. *새 SQL 정확성은 mock 테스트로 검증 불가 → 구동 Supabase 필요.* (`router.refresh()`는 봇 산출물(파일/결정/할일) 노출에 필수라 단순 제거 불가 — getRoomView를 싸게 만드는 방향이 정답.)
+- **Storage `storage.objects` RLS 마이그레이션화 + `0010` 실명 시드 분리** — forward 마이그레이션 작성 후 라이브 적용·검증 필요.
+- **`memory!` non-null 단언 정리** — 반환 타입을 nullable로 바꾸면 UI 전반에 가드가 번져 시각 검증 필요.
+
+이 보류 항목들은 구동 가능한 Supabase 환경에서 별도 세션으로 진행하기를 권장한다.
