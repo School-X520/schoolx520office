@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { mockUser } from "@/lib/mock-data";
-import { uploadRoomFile } from "@/server/files/file-service";
+import { mockStore } from "@/server/data/mock-store";
+import { createFileVersion, createSignedDownloadUrl, uploadRoomFile } from "@/server/files/file-service";
 
 describe("uploadRoomFile 업로드 제한", () => {
   it("실행 파일 확장자를 415로 거부한다", async () => {
@@ -49,5 +50,42 @@ describe("uploadRoomFile 업로드 제한", () => {
       mimeType: "application/pdf",
     });
     expect(file.originalName).toBe("연구계획서.pdf");
+  });
+
+  it("mock mode creates a signed download URL for an accessible room file", async () => {
+    const file = mockStore.addFile({
+      storagePath: "finance/test-download.md",
+      originalName: "다운로드테스트.md",
+      uploadedBy: mockUser.userId,
+      sizeBytes: 120,
+      mimeType: "text/markdown",
+    });
+
+    const result = await createSignedDownloadUrl({ userId: mockUser.userId, roomId: "finance", fileId: file.id });
+
+    expect(result.file.id).toBe(file.id);
+    expect(result.signedUrl).toContain(encodeURIComponent("다운로드테스트.md mock download"));
+  });
+
+  it("increments file versions and records an audit log", async () => {
+    const file = mockStore.addFile({
+      storagePath: "research/version-test.md",
+      originalName: "버전테스트.md",
+      uploadedBy: mockUser.userId,
+      sizeBytes: 120,
+      mimeType: "text/markdown",
+    });
+
+    const versioned = await createFileVersion({
+      userId: mockUser.userId,
+      roomId: "research",
+      fileId: file.id,
+      changeSummary: "문구 수정",
+    });
+
+    expect(versioned.versionNo).toBe(2);
+    expect(
+      mockStore.listAuditLogs().some((log) => log.action === "file.versioned" && log.targetId === file.id),
+    ).toBe(true);
   });
 });

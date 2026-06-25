@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TopHeader } from "@/components/layout/TopHeader";
 import type { UserProfile } from "@/types/domain";
 
@@ -12,6 +13,10 @@ const baseUser: UserProfile = {
   createdAt: "2026-05-08T00:00:00Z",
   updatedAt: "2026-05-08T00:00:00Z",
 };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("TopHeader", () => {
   it("hides the settings menu for non-admin users", () => {
@@ -27,5 +32,43 @@ describe("TopHeader", () => {
 
     expect(screen.getByLabelText("관리")).toBeInTheDocument();
     expect(screen.getByLabelText("내 프로필 설정")).toBeInTheDocument();
+  });
+
+  it("saves profile settings through the profile API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        profile: {
+          ...baseUser,
+          displayName: "Updated Teacher",
+          avatarUrl: "https://example.com/avatar.png",
+          bio: "운영 담당",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TopHeader user={baseUser} />);
+
+    await userEvent.click(screen.getByLabelText("내 프로필 설정"));
+    await userEvent.clear(screen.getByLabelText("이름"));
+    await userEvent.type(screen.getByLabelText("이름"), "Updated Teacher");
+    await userEvent.type(screen.getByLabelText("사진 URL"), "https://example.com/avatar.png");
+    await userEvent.type(screen.getByLabelText("소개"), "운영 담당");
+    await userEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/profile",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            displayName: "Updated Teacher",
+            avatarUrl: "https://example.com/avatar.png",
+            bio: "운영 담당",
+          }),
+        }),
+      );
+    });
+    expect(await screen.findByText("저장되었습니다.")).toBeInTheDocument();
   });
 });

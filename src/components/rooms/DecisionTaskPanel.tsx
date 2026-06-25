@@ -348,7 +348,7 @@ function taskTargetRoomIds(task: Task) {
 }
 
 function displayRoomName(value: string) {
-  if (value.endsWith("방") || value.endsWith("실")) {
+  if (value.endsWith("방") || value.endsWith("실") || value.endsWith("연구회")) {
     return value;
   }
   return `${value}방`;

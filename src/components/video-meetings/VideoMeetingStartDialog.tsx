@@ -11,7 +11,7 @@ import { getGoogleMeetUrlForAccount, getVideoMeetingOpenUrl, isRegisteredVideoMe
 import type { VideoMeeting } from "@/types/domain";
 
 export function VideoMeetingStartDialog({ compact, accountEmail }: { compact?: boolean; accountEmail?: string | null }) {
-  const [title, setTitle] = useState("5월 정기 회의");
+  const [title, setTitle] = useState(defaultMeetingTitle);
   const [description, setDescription] = useState("메인 회의방 화상회의");
   const [provider, setProvider] = useState<"google_meet" | "zoom">("google_meet");
   const [recording, setRecording] = useState(false);
@@ -104,4 +104,13 @@ export function VideoMeetingStartDialog({ compact, accountEmail }: { compact?: b
       </div>
     </Dialog>
   );
+}
+
+function defaultMeetingTitle() {
+  const dateLabel = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "long",
+    day: "numeric",
+  }).format(new Date());
+  return `${dateLabel} 회의`;
 }

@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AllowedUserForm } from "@/components/admin/AllowedUserForm";
 import { AllowedUsersManager } from "@/components/admin/AllowedUsersManager";
 import { MembershipManager } from "@/components/admin/MembershipManager";
 import type { AllowedUser, PendingRoomMembership, Room, RoomMembership, UserProfile } from "@/types/domain";
@@ -74,6 +75,37 @@ afterEach(() => {
 });
 
 describe("admin controls", () => {
+  it("submits a new approved user invite with notes and admin flag", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AllowedUserForm />);
+
+    await userEvent.type(screen.getByLabelText("승인 사용자 이메일"), "new.teacher@example.com");
+    await userEvent.type(screen.getByLabelText("승인 사용자 메모"), "과학관 담당");
+    await userEvent.click(screen.getByRole("checkbox", { name: "관리자 권한" }));
+    await userEvent.click(screen.getByRole("button", { name: "승인 사용자 추가" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/admin/allowed-users",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            email: "new.teacher@example.com",
+            notes: "과학관 담당",
+            isAdmin: true,
+            isActive: true,
+          }),
+        }),
+      );
+    });
+    expect(await screen.findByText("승인 사용자에 추가했습니다.")).toBeInTheDocument();
+    expect(screen.getByLabelText("승인 사용자 이메일")).toHaveValue("");
+    expect(screen.getByLabelText("승인 사용자 메모")).toHaveValue("");
+    expect(screen.getByRole("checkbox", { name: "관리자 권한" })).not.toBeChecked();
+  });
+
   it("updates allowed user active/admin state from the table", async () => {
     const fetchMock = vi.fn(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
