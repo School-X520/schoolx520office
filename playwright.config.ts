@@ -10,7 +10,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "pnpm exec next dev -p 3137",
+    command: "NEXT_PUBLIC_USE_MOCK_DATA=true pnpm exec next dev -p 3137",
     url: "http://127.0.0.1:3137",
     // CI에서는 깨끗한 서버를 강제하고(오염된 기존 서버 재사용 방지), 로컬에서는 기존 서버를 재사용한다.
     reuseExistingServer: !process.env.CI,

@@ -12,6 +12,7 @@ export function AppShell({
   right,
   showSidebar = true,
   fitViewport = false,
+  activeRoomId = null,
 }: {
   user: UserProfile;
   rooms: Room[];
@@ -20,6 +21,7 @@ export function AppShell({
   right?: ReactNode;
   showSidebar?: boolean;
   fitViewport?: boolean;
+  activeRoomId?: string | null;
 }) {
   return (
     <div className={cn("min-h-dvh", fitViewport && "lg:flex lg:h-dvh lg:flex-col lg:overflow-hidden")}>
@@ -34,7 +36,7 @@ export function AppShell({
           fitViewport && "lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:py-3",
         )}
       >
-        {showSidebar ? <SidebarPanel rooms={rooms} memberships={memberships} /> : null}
+        {showSidebar ? <SidebarPanel rooms={rooms} memberships={memberships} activeRoomId={activeRoomId} /> : null}
         <section className={cn("min-w-0", fitViewport && "lg:h-full lg:min-h-0")}>{children}</section>
         {right ? <aside className={cn("min-w-0", fitViewport && "lg:h-full lg:min-h-0")}>{right}</aside> : null}
       </main>

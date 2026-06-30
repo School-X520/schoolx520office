@@ -7,13 +7,16 @@ import type { Room, RoomMembership } from "@/types/domain";
 export function SidebarPanel({
   rooms,
   memberships,
+  activeRoomId,
 }: {
   rooms: Room[];
   memberships: RoomMembership[];
+  activeRoomId?: string | null;
 }) {
   const memberRoomIds = new Set(memberships.map((item) => item.roomId));
   const departmentRooms = rooms.filter((room) => room.type === "department");
   const projectRooms = rooms.filter((room) => room.type === "project");
+  const meetingRoom = rooms.find((room) => room.id === "meeting");
 
   return (
     <aside className="space-y-4">
@@ -23,14 +26,16 @@ export function SidebarPanel({
           작업실 네비게이션
         </div>
         <nav className="space-y-1">
-          <RoomLink room={rooms.find((room) => room.id === "meeting")!} active accessible />
+          {meetingRoom ? (
+            <RoomLink room={meetingRoom} active={activeRoomId === meetingRoom.id} accessible />
+          ) : null}
           <p className="pt-3 text-xs font-semibold text-ink-soft">부서방</p>
           {departmentRooms.map((room) => (
-            <RoomLink key={room.id} room={room} accessible={memberRoomIds.has(room.id)} />
+            <RoomLink key={room.id} room={room} accessible={memberRoomIds.has(room.id)} active={activeRoomId === room.id} />
           ))}
           <p className="pt-3 text-xs font-semibold text-ink-soft">과제</p>
           {projectRooms.map((room) => (
-            <RoomLink key={room.id} room={room} accessible={memberRoomIds.has(room.id)} />
+            <RoomLink key={room.id} room={room} accessible={memberRoomIds.has(room.id)} active={activeRoomId === room.id} />
           ))}
         </nav>
       </WarmCard>

@@ -12,9 +12,15 @@ export function VideoMeetingArtifactCard({ artifact }: { artifact: VideoMeetingA
           <p className="text-xs text-ink-soft">{artifact.artifactType} · {artifact.status}</p>
           {artifact.content ? <p className="mt-2 line-clamp-3 text-sm text-pretty text-ink-soft">{artifact.content}</p> : null}
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary">결정사항 만들기</Button>
-            <Button size="sm" variant="secondary">할 일 만들기</Button>
-            <Button size="sm" variant="secondary">작업방으로 가져가기</Button>
+            <Button type="button" size="sm" variant="secondary" disabled>
+              결정사항 만들기
+            </Button>
+            <Button type="button" size="sm" variant="secondary" disabled>
+              할 일 만들기
+            </Button>
+            <Button type="button" size="sm" variant="secondary" disabled>
+              작업방으로 가져가기
+            </Button>
           </div>
         </div>
       </div>

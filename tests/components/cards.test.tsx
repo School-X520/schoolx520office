@@ -3,13 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FileList } from "@/components/files/FileList";
 import { OfficeFloorPlan } from "@/components/office/OfficeFloorPlan";
+import { MeetingSidePanel } from "@/components/office/MeetingSidePanel";
 import { RoomCard } from "@/components/office/RoomCard";
 import { SharedItemCard } from "@/components/meeting/SharedItemCard";
 import { MeetingImportCard } from "@/components/meeting/MeetingImportCard";
 import { agents, memberships, rooms } from "@/lib/mock-data";
-import type { FileRecord, MeetingImport, Room, SharedItem } from "@/types/domain";
+import type { FileRecord, MeetingImport, OperationStatusSnapshot, Room, SharedItem } from "@/types/domain";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -82,6 +84,92 @@ describe("cards", () => {
     expect(screen.getByText("research 반입 항목")).toBeInTheDocument();
     expect(screen.getByLabelText("공유 공유 항목 삭제")).toBeInTheDocument();
     expect(screen.getByLabelText("research 반입 항목 반입 항목 삭제")).toBeInTheDocument();
+  });
+
+  it("does not add a room suffix to research association room names", () => {
+    const shared: SharedItem = {
+      id: "province-share",
+      sourceRoomId: "province_research",
+      sourceRoomName: "경기도교육연구회",
+      targetRoomId: "meeting",
+      title: "도교육 공유",
+      summary: "요약",
+      sharedBy: null,
+      sourceMessageId: null,
+      sourceFileId: null,
+      createdAt: "2026-05-08T00:00:00Z",
+      metadata: {},
+    };
+
+    render(<SharedItemCard item={shared} />);
+
+    expect(screen.getByText("경기도교육연구회에서 공유됨")).toBeInTheDocument();
+    expect(screen.queryByText("경기도교육연구회방에서 공유됨")).not.toBeInTheDocument();
+  });
+
+  it("opens a file-backed shared item's original through the local open workflow", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ filePath: "/tmp/schoolx/예산계획안.md" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const shared: SharedItem = {
+      id: "file-share",
+      sourceRoomId: "finance",
+      sourceRoomName: "재무",
+      targetRoomId: "meeting",
+      title: "예산 계획안",
+      summary: "요약",
+      sharedBy: null,
+      sourceMessageId: null,
+      sourceFileId: "file-1",
+      createdAt: "2026-05-08T00:00:00Z",
+      metadata: {},
+    };
+
+    render(<SharedItemCard item={shared} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "원본 보기" }));
+    await userEvent.click(screen.getByRole("button", { name: "다운로드 후 열기" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/shared-items/file-share/open-original",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ downloadDir: "~/Downloads/School-X" }),
+        }),
+      );
+    });
+    expect(await screen.findByText((content) => content.includes("/tmp/schoolx/예산계획안.md"))).toBeInTheDocument();
+  });
+
+  it("keeps meeting side-panel quick actions pointed at the meeting room and shows recent shares", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ meetings: [] })));
+    const operationStatus: OperationStatusSnapshot = {
+      sharedCount: 1,
+      briefingCount: 2,
+      taskCount: 3,
+      updatedAt: "2026-06-24T06:00:00Z",
+    };
+    const shared: SharedItem = {
+      id: "recent-share",
+      sourceRoomId: "finance",
+      sourceRoomName: "재무",
+      targetRoomId: "meeting",
+      title: "최근 공유",
+      summary: "회의방에 표시되는 최근 공유 요약",
+      sharedBy: null,
+      sourceMessageId: null,
+      sourceFileId: null,
+      createdAt: "2026-05-08T00:00:00Z",
+      metadata: {},
+    };
+
+    render(<MeetingSidePanel sharedItems={[shared]} activeMeeting={null} operationStatus={operationStatus} />);
+
+    for (const label of ["봇 호출", "공유 작성", "작업 반입", "할 일 만들기"]) {
+      expect(screen.getByRole("link", { name: new RegExp(label) })).toHaveAttribute("href", "/rooms/meeting");
+    }
+    expect(screen.getByText("최근 공유")).toBeInTheDocument();
+    expect(screen.getByText("회의방에 표시되는 최근 공유 요약")).toBeInTheDocument();
   });
 
   it("shares selected files to checked rooms from the file list", async () => {

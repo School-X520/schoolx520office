@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mockUser } from "@/lib/mock-data";
 import { isActiveVideoMeeting, VIDEO_MEETING_ACTIVE_WINDOW_HOURS } from "@/lib/video-meetings/active";
 import {
+  addVideoMeetingArtifact,
   createVideoMeeting,
   joinVideoMeeting,
   registerVideoMeetingJoinUrl,
@@ -257,5 +258,34 @@ describe("video meeting service", () => {
     mockStore.upsertMembership({ userId: observerUserId, roomId: "meeting", role: "observer" });
 
     await expect(summarizeVideoMeeting(observerUserId, meeting.id)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("adds meeting artifacts for accessible meeting members and records readiness events", async () => {
+    closeOpenMeetingRows("meeting");
+    const meeting = await createVideoMeeting(mockUser.userId, {
+      roomId: "meeting",
+      provider: "google_meet",
+      title: "결과물 테스트",
+      consentRecording: false,
+      consentTranscript: true,
+      consentAiSummary: true,
+    });
+
+    const artifact = await addVideoMeetingArtifact(mockUser.userId, meeting.id, {
+      artifactType: "manual_minutes",
+      title: "회의록",
+      content: "결정사항과 할 일",
+      externalUrl: "https://example.com/minutes",
+    });
+
+    expect(artifact.videoMeetingId).toBe(meeting.id);
+    expect(artifact.title).toBe("회의록");
+    expect(artifact.externalUrl).toBe("https://example.com/minutes");
+    expect(mockStore.listVideoEvents(meeting.id).map((event) => event.eventType)).toContain("artifact_ready");
+    expect(
+      mockStore
+        .listAuditLogs()
+        .some((log) => log.action === "video_meeting.artifact_created" && log.targetId === meeting.id),
+    ).toBe(true);
   });
 });

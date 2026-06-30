@@ -2,8 +2,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActiveVideoMeetingBanner } from "@/components/video-meetings/ActiveVideoMeetingBanner";
+import { CreateDecisionTaskFromSummary } from "@/components/video-meetings/CreateDecisionTaskFromSummary";
 import { VideoMeetingJoinButton } from "@/components/video-meetings/VideoMeetingJoinButton";
-import type { VideoMeeting } from "@/types/domain";
+import { VideoMeetingStartDialog } from "@/components/video-meetings/VideoMeetingStartDialog";
+import { VideoMeetingArtifactCard } from "@/components/video-meetings/VideoMeetingArtifactCard";
+import type { VideoMeeting, VideoMeetingArtifact } from "@/types/domain";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -59,5 +62,46 @@ describe("VideoMeetingJoinButton", () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/video-meetings/meeting-1/join", { method: "POST" });
     });
+  });
+});
+
+describe("VideoMeetingStartDialog", () => {
+  it("uses a date-derived default title instead of a stale fixed month", async () => {
+    render(<VideoMeetingStartDialog />);
+
+    await userEvent.click(screen.getByRole("button", { name: "화상회의 시작" }));
+
+    expect(screen.queryByDisplayValue("5월 정기 회의")).not.toBeInTheDocument();
+    expect((screen.getByLabelText("회의 제목") as HTMLInputElement).value.endsWith("회의")).toBe(true);
+  });
+});
+
+describe("dormant video meeting artifact actions", () => {
+  it("renders artifact conversion actions as disabled until handlers are wired", () => {
+    const artifact: VideoMeetingArtifact = {
+      id: "artifact-1",
+      videoMeetingId: "meeting-1",
+      artifactType: "manual_minutes",
+      title: "회의록",
+      content: "결정사항 초안",
+      externalUrl: null,
+      fileId: null,
+      providerArtifactName: null,
+      status: "available",
+      createdBy: null,
+      metadata: {},
+      createdAt: "2026-05-08T00:00:00Z",
+    };
+
+    render(
+      <>
+        <VideoMeetingArtifactCard artifact={artifact} />
+        <CreateDecisionTaskFromSummary />
+      </>,
+    );
+
+    for (const name of ["결정사항 만들기", "할 일 만들기", "작업방으로 가져가기", "결정사항 반영", "할 일 반영", "업무방으로 가져가기"]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
   });
 });
