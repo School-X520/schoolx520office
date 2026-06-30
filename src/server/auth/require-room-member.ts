@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { shouldUseMockData } from "@/lib/env";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { mockStore } from "@/server/data/mock-store";
@@ -17,7 +19,11 @@ type LooseSupabase = {
   from: (table: string) => LooseQuery;
 };
 
-export async function getRoomMembership(userId: string, roomId: string) {
+// 한 요청에서 같은 (userId, roomId) 멤버십을 여러 번 확인해도(예: 핸들러가
+// requireRoomMember를 반복 호출) room_memberships 조회를 1회로 합친다.
+export const getRoomMembership = cache(resolveRoomMembership);
+
+async function resolveRoomMembership(userId: string, roomId: string) {
   if (shouldUseMockData()) {
     return mockStore.getMembership(userId, roomId);
   }
