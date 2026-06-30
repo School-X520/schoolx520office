@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { shouldUseMockData } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -17,11 +19,29 @@ type LooseSupabase = {
   from: (table: string) => LooseQuery;
 };
 
-export async function getCurrentUser(): Promise<UserProfile | null> {
+// 한 요청에서 layout·page·라우트 핸들러가 getCurrentUser를 여러 번 호출해도
+// 인증 체인(세션 검증 + allowed_users/user_profiles 조회)을 1회만 수행하도록 요청 단위로 메모이즈한다.
+export const getCurrentUser = cache(resolveCurrentUser);
+
+async function resolveCurrentUser(): Promise<UserProfile | null> {
   if (shouldUseMockData()) {
     return mockStore.currentUser();
   }
 
+  // 로컬 HMAC 앱 세션을 먼저 본다 — OAuth/dev 로그인 모두 콜백에서 이 쿠키를 굽고,
+  // 서명 검증만으로(네트워크 0회) 사용자를 식별할 수 있다. 매 요청 Supabase Auth 서버
+  // 왕복(getUser)을 제거하는 것이 버튼 체감 지연의 핵심 개선이다.
+  const appSessionUser = await readAppSessionUser();
+  if (appSessionUser) {
+    return getUserProfile({
+      userId: appSessionUser.userId,
+      email: appSessionUser.email,
+      displayName: appSessionUser.email,
+      avatarUrl: null,
+    });
+  }
+
+  // 앱 세션이 없을 때만(레거시/세션 쿠키 유실 등) Supabase Auth로 폴백한다(네트워크 왕복).
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -36,17 +56,7 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
     });
   }
 
-  const appSessionUser = await readAppSessionUser();
-  if (!appSessionUser) {
-    return null;
-  }
-
-  return getUserProfile({
-    userId: appSessionUser.userId,
-    email: appSessionUser.email,
-    displayName: appSessionUser.email,
-    avatarUrl: null,
-  });
+  return null;
 }
 
 async function getUserProfile({
