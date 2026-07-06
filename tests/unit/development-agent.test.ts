@@ -148,7 +148,7 @@ describe("development bot global room observer", () => {
     mockStore.upsertMembership({ userId: meetingOnlyUserId, roomId: "meeting", role: "member" });
 
     const meetingView = await getRoomView(meetingOnlyUserId, "meeting");
-    expect(meetingView?.guestAgents.map((agent) => agent.id)).toContain(DEVELOPMENT_AGENT_ID);
+    expect(meetingView?.guestAgents?.map((agent) => agent.id)).toContain(DEVELOPMENT_AGENT_ID);
 
     const started = await startAgentRun({
       userId: meetingOnlyUserId,

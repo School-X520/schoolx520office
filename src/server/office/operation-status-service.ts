@@ -3,9 +3,16 @@ import "server-only";
 import { shouldUseMockData } from "@/lib/env";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
+import { fetchOpsCountsViaRpc } from "@/server/rooms/page-view";
 import type { OperationStatusSnapshot } from "@/types/domain";
 
 export async function getOperationStatus(userId: string): Promise<OperationStatusSnapshot> {
+  // 실 모드: 당일/멤버십 스코프 count 집계 1왕복(rpc_ops_counts).
+  // v1은 agent_runs·tasks 전테이블을 스캔해 역사가 쌓일수록 저하됐다(계획 1.2 MAJOR).
+  if (!shouldUseMockData()) {
+    return fetchOpsCountsViaRpc(userId);
+  }
+
   const source = shouldUseMockData() ? mockStore : supabaseStore;
   const [memberships, sharedItems, agentRuns, tasks] = await Promise.all([
     shouldUseMockData()
