@@ -8,6 +8,12 @@ import { resolveRoomThread } from "@/server/rooms/thread-service";
 import { getCoordinatorAgent, isDevelopmentAgent } from "@/lib/agents/development-agent";
 import { ROOM_MESSAGE_FETCH_LIMIT } from "@/server/data/data-store";
 import { isActiveVideoMeeting } from "@/lib/video-meetings/active";
+import { getOperationStatus } from "@/server/office/operation-status-service";
+import {
+  fetchOfficeDashboardViaRpc,
+  fetchRoomViewViaRpc,
+  type OfficeDashboard,
+} from "@/server/rooms/page-view";
 
 export async function getOfficeView(userId: string) {
   const source = shouldUseMockData() ? mockStore : supabaseStore;
@@ -21,7 +27,37 @@ export async function getOfficeView(userId: string) {
   return { rooms, memberships, agents };
 }
 
+// 오피스 페이지 전용 대시보드: 방·멤버십·에이전트·회의방 공유함·활성 회의·운영 카운트를
+// 실 모드에선 rpc_office_view 1왕복으로, mock 모드에선 기존 조립으로 반환한다.
+// (getOfficeView는 admin/ops 페이지가 의존하므로 {rooms,memberships,agents} 형태를 그대로 유지한다.)
+export async function getOfficeDashboard(userId: string): Promise<OfficeDashboard> {
+  if (!shouldUseMockData()) {
+    return fetchOfficeDashboardViaRpc(userId);
+  }
+
+  const [view, sharedItems, videoMeetings, operationStatus] = await Promise.all([
+    getOfficeView(userId),
+    Promise.resolve(mockStore.listSharedItems("meeting")),
+    Promise.resolve(mockStore.listVideoMeetings("meeting")),
+    getOperationStatus(userId),
+  ]);
+  const activeMeeting = videoMeetings.find((meeting) => isActiveVideoMeeting(meeting)) ?? null;
+  return {
+    rooms: view.rooms,
+    memberships: view.memberships,
+    agents: view.agents,
+    sharedItems,
+    activeMeeting,
+    operationStatus,
+  };
+}
+
 export async function getRoomView(userId: string, roomId: string, options: { threadId?: string | null } = {}) {
+  // 실(supabase) 모드: 페이지당 1왕복 RPC 경로. mock 모드는 아래 기존 조립 경로를 유지한다.
+  if (!shouldUseMockData()) {
+    return fetchRoomViewViaRpc(userId, roomId, options.threadId ?? null);
+  }
+
   const source = shouldUseMockData() ? mockStore : supabaseStore;
   const [room, membership] = await Promise.all([source.getRoom(roomId), requireRoomMember(userId, roomId)]);
   if (!room || !room.isActive) {

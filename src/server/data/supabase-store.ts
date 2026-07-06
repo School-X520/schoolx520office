@@ -222,7 +222,7 @@ function agentPersonaFrom(value: unknown, fallback: AgentPersona): AgentPersona 
   };
 }
 
-function roomFrom(rowValue: Record<string, unknown>): Room {
+export function roomFrom(rowValue: Record<string, unknown>): Room {
   return {
     id: text(rowValue.id),
     name: text(rowValue.name),
@@ -238,7 +238,7 @@ function roomFrom(rowValue: Record<string, unknown>): Room {
   };
 }
 
-function membershipFrom(rowValue: Record<string, unknown>): RoomMembership {
+export function membershipFrom(rowValue: Record<string, unknown>): RoomMembership {
   return {
     userId: text(rowValue.user_id),
     roomId: text(rowValue.room_id),
@@ -258,7 +258,7 @@ function allowedUserFrom(rowValue: Record<string, unknown>): AllowedUser {
   };
 }
 
-function userProfileFrom(rowValue: Record<string, unknown>): UserProfile {
+export function userProfileFrom(rowValue: Record<string, unknown>): UserProfile {
   return {
     userId: text(rowValue.user_id),
     email: text(rowValue.email),
@@ -271,7 +271,7 @@ function userProfileFrom(rowValue: Record<string, unknown>): UserProfile {
   };
 }
 
-function agentFrom(rowValue: Record<string, unknown>): Agent {
+export function agentFrom(rowValue: Record<string, unknown>): Agent {
   const metadata = jsonObject(rowValue.metadata);
   const base = {
     name: text(rowValue.name),
@@ -303,7 +303,7 @@ function agentFrom(rowValue: Record<string, unknown>): Agent {
   };
 }
 
-function threadFrom(rowValue: Record<string, unknown>): RoomThread {
+export function threadFrom(rowValue: Record<string, unknown>): RoomThread {
   return {
     id: text(rowValue.id),
     roomId: text(rowValue.room_id),
@@ -319,7 +319,7 @@ function threadFrom(rowValue: Record<string, unknown>): RoomThread {
   };
 }
 
-function messageFrom(rowValue: Record<string, unknown>): RoomMessage {
+export function messageFrom(rowValue: Record<string, unknown>): RoomMessage {
   const roomId = text(rowValue.room_id);
   return {
     id: text(rowValue.id),
@@ -335,7 +335,7 @@ function messageFrom(rowValue: Record<string, unknown>): RoomMessage {
   };
 }
 
-function memoryFrom(rowValue: Record<string, unknown>): DomainMemory {
+export function memoryFrom(rowValue: Record<string, unknown>): DomainMemory {
   return {
     roomId: text(rowValue.room_id),
     summary: text(rowValue.summary),
@@ -397,7 +397,7 @@ function agentRunEventFrom(rowValue: Record<string, unknown>): AgentRunEvent {
   };
 }
 
-function sharedItemFrom(rowValue: Record<string, unknown>): SharedItem {
+export function sharedItemFrom(rowValue: Record<string, unknown>): SharedItem {
   const metadata = jsonObject(rowValue.metadata);
   return {
     id: text(rowValue.id),
@@ -415,7 +415,7 @@ function sharedItemFrom(rowValue: Record<string, unknown>): SharedItem {
   };
 }
 
-function importFrom(rowValue: Record<string, unknown>): MeetingImport {
+export function importFrom(rowValue: Record<string, unknown>): MeetingImport {
   return {
     id: text(rowValue.id),
     meetingRoomId: text(rowValue.meeting_room_id, "meeting"),
@@ -430,7 +430,7 @@ function importFrom(rowValue: Record<string, unknown>): MeetingImport {
   };
 }
 
-function fileFrom(rowValue: Record<string, unknown>): FileRecord {
+export function fileFrom(rowValue: Record<string, unknown>): FileRecord {
   return {
     id: text(rowValue.id),
     storagePath: text(rowValue.storage_path),
@@ -445,7 +445,7 @@ function fileFrom(rowValue: Record<string, unknown>): FileRecord {
   };
 }
 
-function decisionFrom(rowValue: Record<string, unknown>): Decision {
+export function decisionFrom(rowValue: Record<string, unknown>): Decision {
   return {
     id: text(rowValue.id),
     roomId: text(rowValue.room_id),
@@ -457,7 +457,7 @@ function decisionFrom(rowValue: Record<string, unknown>): Decision {
   };
 }
 
-function taskFrom(rowValue: Record<string, unknown>): Task {
+export function taskFrom(rowValue: Record<string, unknown>): Task {
   return {
     id: text(rowValue.id),
     roomId: text(rowValue.room_id),
@@ -475,7 +475,7 @@ function taskFrom(rowValue: Record<string, unknown>): Task {
   };
 }
 
-function isTaskVisibleInRoom(task: Task, roomId: string) {
+export function isTaskVisibleInRoom(task: Task, roomId: string) {
   return task.roomId === roomId || task.assigneeRoomId === roomId;
 }
 
@@ -570,7 +570,7 @@ function agentPersonaVersionFrom(rowValue: Record<string, unknown>): AgentPerson
   };
 }
 
-function videoMeetingFrom(rowValue: Record<string, unknown>): VideoMeeting {
+export function videoMeetingFrom(rowValue: Record<string, unknown>): VideoMeeting {
   return {
     id: text(rowValue.id),
     roomId: text(rowValue.room_id),
