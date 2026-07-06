@@ -29,8 +29,12 @@ export async function middleware(request: NextRequest) {
   });
 
   try {
-    // createServerClient와 getUser 사이에 다른 로직을 넣지 말 것 — 토큰 갱신 쿠키 동기화가 깨질 수 있다.
-    await supabase.auth.getUser();
+    // createServerClient와 세션 조회 사이에 다른 로직을 넣지 말 것 — 토큰 갱신 쿠키 동기화가 깨질 수 있다.
+    // getUser()는 매 네비게이션마다 Supabase Auth 서버 왕복을 강제한다. 이 미들웨어의 목적은
+    // 인증 판단이 아니라 토큰 갱신뿐이므로(게이트는 페이지/라우트 레벨), 쿠키의 만료 시각을
+    // 로컬에서 확인해 만료 임박 시에만 네트워크 갱신을 수행하는 getSession()을 쓴다.
+    // 반환된 세션 값으로 어떤 인증 판단도 하지 않는다(미검증 클레임이므로).
+    await supabase.auth.getSession();
   } catch {
     // Supabase 도달 실패 등은 막지 않고 통과시킨다(페이지 레벨 가드가 최종 처리).
     return supabaseResponse;

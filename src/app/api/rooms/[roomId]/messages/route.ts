@@ -5,6 +5,7 @@ import { shouldUseMockData } from "@/lib/env";
 import { createRoomMessage } from "@/server/messages/room-message-service";
 import { requireRoomMember } from "@/server/auth/require-room-member";
 import { requireUser } from "@/server/auth/require-user";
+import { ROOM_MESSAGE_FETCH_LIMIT } from "@/server/data/data-store";
 import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
@@ -22,7 +23,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ room
     const source = shouldUseMockData() ? mockStore : supabaseStore;
     const threadId = new URL(request.url).searchParams.get("threadId");
     const thread = await resolveRoomThread(user.userId, roomId, threadId);
-    return jsonOk({ messages: await source.listMessages(roomId, thread.id), thread, user });
+    return jsonOk({
+      messages: await source.listMessages(roomId, thread.id, { limit: ROOM_MESSAGE_FETCH_LIMIT }),
+      thread,
+      user,
+    });
   } catch (error) {
     return jsonError(error);
   }

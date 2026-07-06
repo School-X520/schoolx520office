@@ -29,6 +29,10 @@ export function getDataStore(): DataStore {
   return shouldUseMockData() ? mockStore : supabaseStore;
 }
 
+// 화면 표시용 메시지 조회 상한. 히스토리가 쌓여도 페이지 렌더·4초 폴링 비용이 무한히 커지지 않게 막는다.
+// 이보다 오래된 메시지는 현재 UI로는 조회할 수 없다(과거 스크롤은 v2의 커서 페이지네이션에서 지원).
+export const ROOM_MESSAGE_FETCH_LIMIT = 200;
+
 // ── 양방향 계약 가드 ──────────────────────────────────────────────
 // DataStore는 supabaseStore를 진실원으로 삼아 "supabase에 있는 메서드는 mock도 구현"을 강제한다.
 // 반대 방향(mock에만 추가된 메서드)은 기본적으로 잡히지 않아, getDataStore()로는 호출할 수 없는
