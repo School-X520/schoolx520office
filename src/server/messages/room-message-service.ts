@@ -6,6 +6,7 @@ import { supabaseStore } from "@/server/data/supabase-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { ForbiddenError } from "@/server/auth/errors";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
+import { sendMessageViaRpc } from "@/server/rooms/page-view";
 import type { MessageType } from "@/types/domain";
 
 export async function createRoomMessage(input: {
@@ -16,6 +17,11 @@ export async function createRoomMessage(input: {
   type?: MessageType;
   metadata?: Record<string, unknown>;
 }) {
+  // 실 모드: 멤버십/쓰기검사·스레드해석·insert·bump·감사를 rpc_send_message 1왕복으로.
+  if (!shouldUseMockData()) {
+    return sendMessageViaRpc(input);
+  }
+
   const membership = await requireRoomMember(input.userId, input.roomId);
   if (!canWriteRoom(membership.role)) {
     throw new ForbiddenError("메시지를 작성할 권한이 없습니다.");

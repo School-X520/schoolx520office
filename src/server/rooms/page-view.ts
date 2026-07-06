@@ -30,9 +30,11 @@ import {
 import type {
   Agent,
   DomainMemory,
+  MessageType,
   OperationStatusSnapshot,
   Room,
   RoomMembership,
+  RoomMessage,
   RoomViewModel,
   SharedItem,
   VideoMeeting,
@@ -225,6 +227,37 @@ export function assembleOfficeDashboard(payload: Row): OfficeDashboard {
 export async function fetchOfficeDashboardViaRpc(userId: string): Promise<OfficeDashboard> {
   const data = await callRpc("rpc_office_view", { p_user_id: userId });
   return assembleOfficeDashboard(asRow(data) ?? {});
+}
+
+// 실 모드 메시지 전송: rpc_send_message 1왕복(멤버십/쓰기검사·스레드해석·insert·bump·감사).
+export async function sendMessageViaRpc(input: {
+  userId: string;
+  roomId: string;
+  threadId?: string | null;
+  content: string;
+  type?: MessageType;
+  metadata?: Record<string, unknown>;
+}): Promise<RoomMessage> {
+  const data = await callRpc("rpc_send_message", {
+    p_user_id: input.userId,
+    p_room_id: input.roomId,
+    p_thread_id: asUuidOrNull(input.threadId),
+    p_content: input.content,
+    p_type: input.type ?? "human",
+    p_metadata: input.metadata ?? {},
+  });
+  const payload = asRow(data) ?? {};
+  if (payload.forbidden === true) {
+    throw new ForbiddenError("메시지를 작성할 권한이 없습니다.");
+  }
+  if (payload.threadNotFound === true) {
+    throw statusError("대화 스레드를 찾을 수 없습니다.", 404);
+  }
+  const messageRow = asRow(payload.message);
+  if (!messageRow) {
+    throw statusError("메시지 전송에 실패했습니다.", 500);
+  }
+  return messageFrom(messageRow);
 }
 
 // rpc_ops_counts만 필요한 경량 경로(운영 상태 갱신 라우트).

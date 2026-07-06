@@ -16,6 +16,8 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 import { getOfficeDashboard, getRoomView } from "@/server/rooms/get-room-view";
 import { getOperationStatus } from "@/server/office/operation-status-service";
+import { createRoomMessage } from "@/server/messages/room-message-service";
+import { ForbiddenError } from "@/server/auth/errors";
 
 const ISO = "2026-01-01T00:00:00+00:00";
 
@@ -62,10 +64,28 @@ const officePayload = {
 
 beforeEach(() => {
   admin = {
-    rpc: vi.fn(async (fn: string) => {
+    rpc: vi.fn(async (fn: string, args: Record<string, unknown>) => {
       if (fn === "rpc_room_view") return { data: roomViewPayload, error: null };
       if (fn === "rpc_office_view") return { data: officePayload, error: null };
       if (fn === "rpc_ops_counts") return { data: { sharedCount: 0, briefingCount: 0, taskCount: 0 }, error: null };
+      if (fn === "rpc_send_message") {
+        if (args.p_room_id === "__forbidden__") return { data: { forbidden: true }, error: null };
+        return {
+          data: {
+            message: {
+              id: "msg-1",
+              room_id: args.p_room_id,
+              thread_id: "11111111-1111-4111-8111-111111111111",
+              sender_user_id: args.p_user_id,
+              type: "human",
+              content: args.p_content,
+              metadata: {},
+              created_at: ISO,
+            },
+          },
+          error: null,
+        };
+      }
       return { data: null, error: null };
     }),
     from: vi.fn(() => {
@@ -96,5 +116,21 @@ describe("real-mode page views issue exactly one RPC round-trip", () => {
     expect(admin.rpc).toHaveBeenCalledTimes(1);
     expect(admin.rpc).toHaveBeenCalledWith("rpc_ops_counts", expect.objectContaining({ p_user_id: "u1" }));
     expect(admin.from).not.toHaveBeenCalled();
+  });
+
+  it("createRoomMessage → 1 rpc_send_message, 0 table reads, maps the returned row", async () => {
+    const message = await createRoomMessage({ userId: "u1", roomId: "finance", threadId: null, content: "안녕" });
+    expect(message.id).toBe("msg-1");
+    expect(message.content).toBe("안녕");
+    expect(message.senderUserId).toBe("u1");
+    expect(admin.rpc).toHaveBeenCalledTimes(1);
+    expect(admin.rpc).toHaveBeenCalledWith("rpc_send_message", expect.objectContaining({ p_room_id: "finance", p_content: "안녕" }));
+    expect(admin.from).not.toHaveBeenCalled();
+  });
+
+  it("createRoomMessage → throws ForbiddenError on the forbidden marker", async () => {
+    await expect(
+      createRoomMessage({ userId: "u1", roomId: "__forbidden__", threadId: null, content: "x" }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
   });
 });
