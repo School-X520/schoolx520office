@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MessageComposer } from "@/components/rooms/MessageComposer";
 import { MessageTimeline } from "@/components/rooms/MessageTimeline";
 import { mergeMessages, mergeServerMessages } from "@/lib/merge-messages";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
   Agent,
   AgentRun,
@@ -43,18 +44,15 @@ export function RoomChat({
   const [cancellingAgentRunIds, setCancellingAgentRunIds] = useState<Set<string>>(() => new Set());
   const chatAgents = [residentAgent, ...guestAgents].filter((agent): agent is Agent => Boolean(agent));
 
-  // 다른 참여자(또는 다른 사람이 호출한 봇)의 메시지를 받기 위해 현재 스레드를 주기적으로 폴링한다.
-  // mergeMessages는 추가/갱신만 하므로 진행 중인 낙관적/대기 메시지를 지우지 않는다.
+  // 실시간 수신: 4초 폴링 대신 Supabase Realtime으로 현재 스레드의 새 메시지를 push 구독한다.
+  // room_messages RLS(is_room_member)가 방별로 스코프하므로 비멤버는 구독으로도 받지 못한다.
+  // 상시 타이머는 두지 않고, 탭 재활성화 시에만 1회 델타 캐치업으로 끊김 구간을 보정한다.
+  // 내 메시지는 낙관적→커밋 경로로 이미 반영되므로 구독에서 중복 수신을 건너뛴다.
   useEffect(() => {
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    async function poll() {
+    async function catchUp() {
       if (cancelled) {
-        return;
-      }
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
-        schedule();
         return;
       }
       try {
@@ -69,25 +67,50 @@ export function RoomChat({
           }
         }
       } catch {
-        // 일시적 네트워크 오류는 다음 주기에 재시도.
-      }
-      schedule();
-    }
-
-    function schedule() {
-      if (!cancelled) {
-        timer = setTimeout(poll, 4000);
+        // 일시적 네트워크 오류는 다음 캐치업/재구독에서 보정.
       }
     }
 
-    schedule();
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        void catchUp();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    // mock 모드나 Supabase URL 미구성 환경(테스트 등)에서는 구독을 열지 않는다.
+    const realtimeEnabled =
+      typeof process.env.NEXT_PUBLIC_SUPABASE_URL === "string" &&
+      process.env.NEXT_PUBLIC_USE_MOCK_DATA !== "true";
+    if (!realtimeEnabled) {
+      return () => {
+        cancelled = true;
+        document.removeEventListener("visibilitychange", handleVisibility);
+      };
+    }
+
+    const supabase = createSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`room-messages:${roomId}:${threadId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "room_messages", filter: `thread_id=eq.${threadId}` },
+        (payload) => {
+          const incoming = realtimeRowToMessage(payload.new as Record<string, unknown>);
+          if (incoming.senderUserId === currentUserId) {
+            return;
+          }
+          setMessages((current) => mergeServerMessages(current, [incoming]));
+        },
+      )
+      .subscribe();
+
     return () => {
       cancelled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
+      document.removeEventListener("visibilitychange", handleVisibility);
+      void supabase.removeChannel(channel);
     };
-  }, [roomId, threadId]);
+  }, [roomId, threadId, currentUserId]);
 
   function addOptimisticMessage(message: RoomMessage) {
     setMessages((current) => mergeMessages(current, [message]));
@@ -272,6 +295,27 @@ export function RoomChat({
       />
     </>
   );
+}
+
+// Realtime payload.new(원시 DB 행, snake_case)을 클라이언트에서 RoomMessage로 매핑한다.
+// (서버 전용 messageFrom을 클라이언트에서 쓸 수 없어 필요한 필드만 최소 매핑한다.)
+function realtimeRowToMessage(row: Record<string, unknown>): RoomMessage {
+  const roomId = typeof row.room_id === "string" ? row.room_id : "";
+  const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+    ? (row.metadata as Record<string, unknown>)
+    : {};
+  return {
+    id: typeof row.id === "string" ? row.id : "",
+    roomId,
+    threadId: typeof row.thread_id === "string" ? row.thread_id : `${roomId}-legacy-thread`,
+    senderUserId: typeof row.sender_user_id === "string" ? row.sender_user_id : null,
+    senderAgentId: typeof row.sender_agent_id === "string" ? row.sender_agent_id : null,
+    agentRunId: typeof row.agent_run_id === "string" ? row.agent_run_id : null,
+    type: (typeof row.type === "string" ? row.type : "system") as RoomMessage["type"],
+    content: typeof row.content === "string" ? row.content : "",
+    metadata,
+    createdAt: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
+  };
 }
 
 function createPendingAgentMessage(roomId: string, threadId: string, run: AgentRun): RoomMessage {
