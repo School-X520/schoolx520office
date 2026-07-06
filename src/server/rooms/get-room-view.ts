@@ -5,12 +5,8 @@ import { mockStore } from "@/server/data/mock-store";
 import { supabaseStore } from "@/server/data/supabase-store";
 import { canWriteRoom, requireRoomMember } from "@/server/auth/require-room-member";
 import { resolveRoomThread } from "@/server/rooms/thread-service";
-import {
-  DEVELOPMENT_AGENT_ROOM_ID,
-  getCoordinatorAgent,
-  isDevelopmentAgent,
-} from "@/lib/agents/development-agent";
-import { backfillDevelopmentAgentRequestMirrors } from "@/server/agents/development-request-mirror";
+import { getCoordinatorAgent, isDevelopmentAgent } from "@/lib/agents/development-agent";
+import { ROOM_MESSAGE_FETCH_LIMIT } from "@/server/data/data-store";
 import { isActiveVideoMeeting } from "@/lib/video-meetings/active";
 
 export async function getOfficeView(userId: string) {
@@ -32,9 +28,9 @@ export async function getRoomView(userId: string, roomId: string, options: { thr
     return null;
   }
 
-  if (roomId === DEVELOPMENT_AGENT_ROOM_ID) {
-    await backfillDevelopmentAgentRequestMirrors({ source });
-  }
+  // 개발 요청 미러 backfill은 과거 여기(개발방 진입 시)에서 인라인 실행됐다.
+  // agent_runs 전체 스캔 + run별 스레드 조회 루프가 페이지 렌더를 수 초 지연시켜
+  // /api/agent-runs/sweep(일일 cron)으로 이동했다. 실시간 미러링은 startAgentRun이 계속 담당한다.
 
   const userMemberships = shouldUseMockData()
     ? mockStore.listMemberships().filter((item) => item.userId === userId)
@@ -64,7 +60,7 @@ export async function getRoomView(userId: string, roomId: string, options: { thr
     source.listAgents(),
     source.listVideoMeetings(roomId),
     source.getMemory(roomId),
-    source.listMessages(roomId, activeThread.id),
+    source.listMessages(roomId, activeThread.id, { limit: ROOM_MESSAGE_FETCH_LIMIT }),
     source.listFiles(roomId),
     source.listSharedItems(roomId),
     source.listImports(roomId),

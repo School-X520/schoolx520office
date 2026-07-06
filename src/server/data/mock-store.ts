@@ -597,10 +597,15 @@ export const mockStore = {
     return thread;
   },
 
-  listMessages(roomId: string, threadId?: string | null) {
-    return state()
+  listMessages(roomId: string, threadId?: string | null, options?: { limit?: number }) {
+    const list = state()
       .messages.filter((message) => message.roomId === roomId && (!threadId || message.threadId === threadId))
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    return options?.limit ? list.slice(-options.limit) : list;
+  },
+
+  getMessageById(messageId: string) {
+    return state().messages.find((message) => message.id === messageId) ?? null;
   },
 
   createMessage(input: {

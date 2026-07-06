@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEVELOPMENT_AGENT_ID } from "@/lib/agents/development-agent";
 import { mockUser } from "@/lib/mock-data";
+import { backfillDevelopmentAgentRequestMirrors } from "@/server/agents/development-request-mirror";
 import { executeTool } from "@/server/agents/tools/execute-tool";
 import { startAgentRun } from "@/server/agents/run-agent";
 import { mockStore } from "@/server/data/mock-store";
@@ -162,7 +163,7 @@ describe("development bot global room observer", () => {
     expect(started.run.metadata.developmentRoomMirrorMessageId).toBeTruthy();
   });
 
-  it("backfills missing development bot guest requests when opening the development room", async () => {
+  it("backfills missing development bot guest requests via the sweep backfill", async () => {
     const request = "백필되어야 하는 메인방 개발 요청";
     const meetingThread = mockStore.ensureRoomThread("meeting");
     const meetingMessage = mockStore.createMessage({
@@ -187,6 +188,10 @@ describe("development bot global room observer", () => {
     expect(mockStore.listMessages("development").some((message) => message.metadata.sourceAgentRunId === run.id)).toBe(
       false,
     );
+
+    // backfill은 페이지 렌더 지연을 막기 위해 방 열람이 아니라 sweep cron에서 실행된다.
+    const backfillResult = await backfillDevelopmentAgentRequestMirrors({ source: mockStore });
+    expect(backfillResult.created).toBeGreaterThanOrEqual(1);
 
     const developmentView = await getRoomView(mockUser.userId, "development");
     const mirrorMessage = developmentView?.messages.find((message) => message.metadata.sourceAgentRunId === run.id);

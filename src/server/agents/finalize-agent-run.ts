@@ -10,9 +10,9 @@ export async function finalizeAgentRun(agentRunId: string) {
     return null;
   }
 
-  const output = run.outputMessageId
-    ? (await source.listMessages(run.roomId, run.threadId)).find((message) => message.id === run.outputMessageId)
-    : null;
+  // id 단건 조회 후 방 소속을 검증한다(이전에는 스레드 전체 메시지를 불러와 find()로 찾았다).
+  const outputCandidate = run.outputMessageId ? await source.getMessageById(run.outputMessageId) : null;
+  const output = outputCandidate && outputCandidate.roomId === run.roomId ? outputCandidate : null;
 
   const summary = output?.content.slice(0, 220) ?? "에이전트 실행이 완료되었습니다.";
   await source.updateThread(run.threadId, {

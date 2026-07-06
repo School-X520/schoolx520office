@@ -664,7 +664,8 @@ export async function runAgent(input: RunAgentInput) {
 
 async function getExistingInputMessage(roomId: string, inputMessageId: string) {
   const source = getSource();
-  const inputMessage = (await source.listMessages(roomId)).find((message) => message.id === inputMessageId);
+  // id 단건 조회 후 방 소속을 검증한다(이전에는 방 전체 메시지를 불러와 find()로 찾았다).
+  const inputMessage = await source.getMessageById(inputMessageId);
   if (!inputMessage || inputMessage.roomId !== roomId) {
     throw new Error("연결할 입력 메시지를 찾을 수 없습니다.");
   }

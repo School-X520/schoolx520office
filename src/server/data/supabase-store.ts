@@ -1267,7 +1267,10 @@ export const supabaseStore = {
     return threadFrom(row(assertOk(data, error))!);
   },
 
-  async listMessages(roomId: string, threadId?: string | null) {
+  // limit이 있으면 최신 limit건만 DB에서 가져온다(내림차순 조회 후 뒤집어 반환 계약은 항상 오래된 → 최신).
+  // limit 없는 호출은 전체 히스토리를 읽으므로 핫패스(페이지 렌더/폴링)에서는 반드시 limit을 넘길 것.
+  async listMessages(roomId: string, threadId?: string | null, options?: { limit?: number }) {
+    const limit = options?.limit;
     let query = db()
       .from("room_messages")
       .select("*")
@@ -1275,16 +1278,37 @@ export const supabaseStore = {
     if (threadId) {
       query = query.eq("thread_id", threadId);
     }
-    const { data, error } = await query.order("created_at", { ascending: true });
+    // id 보조 정렬: created_at 동률(마이크로초) 시에도 순서와 limit 경계가 결정적이다.
+    let ordered = query
+      .order("created_at", { ascending: !limit })
+      .order("id", { ascending: !limit });
+    if (limit) {
+      ordered = ordered.limit(limit);
+    }
+    const { data, error } = await ordered;
     if (isThreadSchemaMissing(error)) {
-      const fallback = await db()
+      let fallback = db()
         .from("room_messages")
         .select("*")
         .eq("room_id", roomId)
-        .order("created_at", { ascending: true });
-      return rows(assertOk(fallback.data, fallback.error)).map(messageFrom);
+        .order("created_at", { ascending: !limit })
+        .order("id", { ascending: !limit });
+      if (limit) {
+        fallback = fallback.limit(limit);
+      }
+      const fallbackResult = await fallback;
+      const fallbackList = rows(assertOk(fallbackResult.data, fallbackResult.error)).map(messageFrom);
+      return limit ? fallbackList.reverse() : fallbackList;
     }
-    return rows(assertOk(data, error)).map(messageFrom);
+    const list = rows(assertOk(data, error)).map(messageFrom);
+    return limit ? list.reverse() : list;
+  },
+
+  // id 단건 조회. "전체 메시지를 불러와 find()" 패턴을 대체한다(호출부에서 roomId 소속 검증 필수).
+  async getMessageById(messageId: string) {
+    const { data, error } = await db().from("room_messages").select("*").eq("id", messageId).maybeSingle();
+    const result = row(assertOk(data, error));
+    return result ? messageFrom(result) : null;
   },
 
   async createMessage(input: {

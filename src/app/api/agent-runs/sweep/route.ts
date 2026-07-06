@@ -1,6 +1,8 @@
 import { jsonError, jsonOk } from "@/lib/api";
 import { statusError } from "@/lib/http-error";
+import { backfillDevelopmentAgentRequestMirrors } from "@/server/agents/development-request-mirror";
 import { sweepStuckAgentRuns } from "@/server/agents/run-agent";
+import { getDataStore } from "@/server/data/data-store";
 
 export const maxDuration = 60;
 
@@ -20,7 +22,13 @@ async function handle(request: Request) {
   try {
     assertCronAuthorized(request);
     const result = await sweepStuckAgentRuns();
-    return jsonOk(result);
+    // 개발 요청 미러 backfill. 과거에는 개발방 페이지 진입 시 인라인 실행돼 렌더를 수 초 지연시켰다.
+    // 실시간 미러링은 startAgentRun이 담당하므로 여기서는 누락분만 하루 1회 보정한다.
+    // backfill 실패가 이미 커밋된 sweep 결과까지 cron 실패(500)로 가리지 않도록 격리한다.
+    const mirrorBackfill = await backfillDevelopmentAgentRequestMirrors({ source: getDataStore() }).catch(
+      (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),
+    );
+    return jsonOk({ ...result, mirrorBackfill });
   } catch (error) {
     return jsonError(error);
   }

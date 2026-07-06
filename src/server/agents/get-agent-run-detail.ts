@@ -17,9 +17,9 @@ export async function getAgentRunDetail(input: { userId: string; roomId: string;
     throw statusError("봇 실행을 찾을 수 없습니다.", 404);
   }
 
-  const outputMessage = run.outputMessageId
-    ? (await source.listMessages(input.roomId, run.threadId)).find((message) => message.id === run.outputMessageId) ?? null
-    : null;
+  // id 단건 조회 후 방 소속을 검증한다(이전에는 스레드 전체 메시지를 불러와 find()로 찾았다).
+  const outputCandidate = run.outputMessageId ? await source.getMessageById(run.outputMessageId) : null;
+  const outputMessage = outputCandidate && outputCandidate.roomId === input.roomId ? outputCandidate : null;
   const events = await source.listAgentRunEvents(input.runId);
 
   return { run, outputMessage, activity: publicAgentRunActivity(run, events) };
